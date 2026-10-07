@@ -1,38 +1,38 @@
-# Especificación de la API y contratos
+# API Specification and Contracts
 
-> Formato OpenSpec: cada capacidad se describe con requisitos (`DEBE`) y escenarios `CUANDO`/`ENTONCES`.
+> OpenSpec format: each capability is described with requirements (`SHALL`/`MUST`) and `WHEN`/`THEN` scenarios.
 
-## Propósito
+## Purpose
 
-<!-- Describe en 2-3 líneas qué hace el sistema y a quién sirve. -->
+<!-- Describe in 2-3 lines what the system does and who it serves. -->
 
-## Requisitos
+## Requirements
 
-### Requisito: <Nombre de la capacidad>
+### Requirement: <Capability name>
 
-El sistema DEBE <comportamiento esperado>.
+The system SHALL <expected behavior>.
 
-#### Escenario: <Caso exitoso>
+#### Scenario: <Success case>
 
-- **CUANDO** <acción o petición, p. ej. `POST /recurso` con un cuerpo válido>
-- **ENTONCES** <resultado esperado, p. ej. responde `201 Created` con el recurso creado>
+- **WHEN** <action or request, e.g. `POST /resource` with a valid body>
+- **THEN** <expected result, e.g. responds `201 Created` with the created resource>
 
-#### Escenario: <Caso de error>
+#### Scenario: <Error case>
 
-- **CUANDO** <petición inválida>
-- **ENTONCES** <respuesta de error, p. ej. `400 Bad Request`>
+- **WHEN** <invalid request>
+- **THEN** <error response, e.g. `400 Bad Request`>
 
-## Contratos
+## Contracts
 
-### `<MÉTODO> /ruta`
+### `<METHOD> /path`
 
-**Petición**
+**Request**
 
 ```json
 {}
 ```
 
-**Respuesta `200`**
+**Response `200`**
 
 ```json
 {}
