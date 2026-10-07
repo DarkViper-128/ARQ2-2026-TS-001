@@ -6,7 +6,7 @@
 
 ## Contexto
 
-<!-- ¿Qué problema o fuerza obliga a tomar esta decisión? -->
+<!-- ¿Qué problema o necesidad obliga a tomar esta decisión? -->
 
 ## Decisión
 
