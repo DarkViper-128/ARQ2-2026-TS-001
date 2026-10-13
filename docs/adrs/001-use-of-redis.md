@@ -39,3 +39,11 @@ for someone else. That way no seat stays "frozen" forever.
 - We have to think carefully about how to clean the cache so we do not show old data.
 - Now we depend on Redis being up and running.
 - If Redis restarts, some holds can be lost.
+
+## How we solve it
+- We turn on persistence (AOF) so Redis does not forget everything on restart.
+- Before confirming the purchase, we re-check that the seat is still held.
+- In MySQL we add a rule (`UNIQUE` on the seat): so, even if something fails, the
+  same seat can NEVER be sold twice. This is the final safety net against
+  overbooking.
+- When someone really buys, we send a `catalog.updated` event to refresh the cache.
