@@ -23,3 +23,13 @@ MySQL stays the *source of truth*: the final sale is stored there.
 It is like a shopping cart that empties itself. You reserve the seat, a timer
 starts, and if you do not finish the payment, the seat is released automatically
 for someone else. That way no seat stays "frozen" forever.
+## What we gain
+- Reads are almost instant (they do not drive MySQL crazy).
+- Locks last very little (TTL) instead of 15 seconds.
+- It handles huge spikes of users.
+- MySQL only works when a purchase is actually confirmed.
+
+## What we lose / risks
+- We have to think carefully about how to clean the cache so we do not show old data.
+- Now we depend on Redis being up and running.
+- If Redis restarts, some holds can be lost.
