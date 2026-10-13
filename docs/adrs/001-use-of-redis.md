@@ -1,3 +1,9 @@
+# 001 - Use of Redis
+
+- **Status:** Accepted
+- **Date:** 2026-10-12
+- **Authors:** Duvan Leal, Santiago Vallejo, Carlos Andrés Arteaga
+
 ## In one sentence
 Instead of thousands of people asking MySQL everything directly, we put Redis
 (super fast memory) in front for reads and to "hold" seats for a few minutes.
