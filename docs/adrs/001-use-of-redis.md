@@ -29,6 +29,7 @@ MySQL stays the *source of truth*: the final sale is stored there.
 It is like a shopping cart that empties itself. You reserve the seat, a timer
 starts, and if you do not finish the payment, the seat is released automatically
 for someone else. That way no seat stays "frozen" forever.
+
 ## What we gain
 - Reads are almost instant (they do not drive MySQL crazy).
 - Locks last very little (TTL) instead of 15 seconds.
@@ -47,3 +48,9 @@ for someone else. That way no seat stays "frozen" forever.
   same seat can NEVER be sold twice. This is the final safety net against
   overbooking.
 - When someone really buys, we send a `catalog.updated` event to refresh the cache.
+
+## Why it is the best option for this case
+The heart of FlashTix is selling tickets fast and fairly. Redis makes "viewing" not
+kill the database and makes "holding" instant, while MySQL guarantees the real sale
+with no duplicates. This solves exactly the bottleneck of the case and satisfies
+Features 2 and 3.
