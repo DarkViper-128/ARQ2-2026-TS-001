@@ -10,3 +10,16 @@ Imagine FlashTix is a store with a SINGLE cash register (MySQL).
   until the bank (legacy payment gateway) answers... and the bank takes 15 seconds.
   Meanwhile, everyone waits with the lock held.
 - Result: 504 errors, angry users and, worse, seats sold twice (overbooking).
+
+## What we decided
+Use *Redis* (RAM memory, very fast) to:
+1. Serve the catalog and seat availability WITHOUT touching MySQL. [Feature 2]
+2. Store the temporary seat "hold" with a TTL (if you do not pay within X minutes,
+   the seat is released by itself). [Feature 3]
+
+MySQL stays the *source of truth*: the final sale is stored there.
+
+## Why TTL (Time To Live)
+It is like a shopping cart that empties itself. You reserve the seat, a timer
+starts, and if you do not finish the payment, the seat is released automatically
+for someone else. That way no seat stays "frozen" forever.
