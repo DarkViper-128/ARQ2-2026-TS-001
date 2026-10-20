@@ -50,7 +50,7 @@ Each service only touches its own data; the rest comes through its API or its ev
 
 | Domain (owner) | Entity | Key fields |
 | --- | --- | --- |
-| Catalog (Catalog Service) | **Event** | `eventId`, `name`, `artist`, `venue`, `startsAt`, `saleStartsAt`, `status` (`DRAFT`, `ON_SALE`, `SOLD_OUT`, `CANCELLED`), `priceCategories[]` |
+| Catalog (Catalog Service) | **Event** | `eventId`, `name`, `artist`, `venue`, `startsAt`, `saleStartsAt`, `status` (`DRAFT`, `PUBLISHED`, `ON_SALE`, `SOLD_OUT`, `CANCELLED`), `priceCategories[]` |
 | | **Seat** | `seatId`, `section`, `row`, `number`, `category`, `status` (`AVAILABLE`, `HELD`, `SOLD`) |
 | Queue (Waiting Room) | **QueueTicket** | `queueTicketId`, `eventId`, `userId`, `position`, `status` (`WAITING`, `ADMITTED`), `admissionToken` (valid 10 min) |
 | Hold (Reservation) | **Hold** | `holdId`, `eventId`, `userId`, `seatIds[]` (1-6), `status` (`ACTIVE`, `LOCKED`, `RELEASED`, `CONSUMED`), `orderId`, `expiresAt` |
@@ -149,6 +149,28 @@ Login uses the standard OIDC endpoints of Keycloak (`/realms/flashtix/protocol/o
 - **Responses:** `200 OK` · `404 TICKET_NOT_FOUND`
 - **Example `200`:** `{ "ticketId": "1a2b...", "seatId": "A-12-07", "qrPayload": "FTX1.1a2b...", "downloadUrl": "https://files.flashtix.com/...pdf?X-Amz-Expires=900" }`
 
+### Event Organizer (Admin Console)
+
+### `POST /admin/events` - Catalog
+- **Auth:** ORGANIZER
+- **Request body:** `name`, `artist`, `venue`, `startsAt`, `saleStartsAt`, `priceCategories[]`, `seats[]`
+- **Responses:** `201 Created` event saved in `catalog-db` as `DRAFT` (header `Location`) · `400 VALIDATION_ERROR` · `403 FORBIDDEN` · `409 EVENT_ALREADY_EXISTS` · `503`
+- **Example request:** `{ "name": "World Tour 2026", "artist": "The Headliners", "startsAt": "2026-11-20T23:00:00Z", "saleStartsAt": "2026-10-20T15:00:00Z", "priceCategories": [{ "category": "VIP", "price": { "amount": 45000000, "currency": "COP" } }], "seats": [{ "seatId": "A-12-07", "category": "VIP" }] }`
+
+### `POST /admin/events/{eventId}/publish` - Catalog
+- **Auth:** ORGANIZER
+- **Request body:** none
+- **Behavior:** the event becomes `PUBLISHED` and is pre-loaded into `catalog-cache` before the sale opens; at `saleStartsAt` it becomes `ON_SALE` and the virtual queue opens.
+- **Responses:** `200 OK` · `403 FORBIDDEN` · `404 EVENT_NOT_FOUND` · `409 INVALID_EVENT_STATUS` (not `DRAFT`) · `503`
+- **Example `200`:** `{ "eventId": "3f0c8a52-...", "status": "PUBLISHED", "saleStartsAt": "2026-10-20T15:00:00Z" }`
+
+### `POST /admin/orders/{orderId}/refund` - Order
+- **Auth:** ORGANIZER
+- **Request body:** `{ "reason": "EVENT_CANCELLED" }`
+- **Behavior:** starts the refund compensation of the saga: order → `REFUND_PENDING`, `refund.requested` is published; on `refund.completed` the order becomes `CANCELLED` and `order.cancelled` notifies the fan.
+- **Responses:** `202 Accepted` · `403 FORBIDDEN` · `404 ORDER_NOT_FOUND` · `409 INVALID_ORDER_STATUS` (only `CONFIRMED` orders) · `503`
+- **Example `202`:** `{ "orderId": "e4a7...", "status": "REFUND_PENDING" }`
+
 ---
 
 ## 5. Asynchronous events (RabbitMQ)
@@ -204,6 +226,10 @@ The API Gateway SHALL validate the JWT (signature, `exp`, `iss`, `aud`) and the 
 #### Scenario: Missing or expired token
 - **WHEN** a request reaches a protected route without a JWT or with an expired one
 - **THEN** the gateway answers `401 UNAUTHENTICATED` and no service receives it
+
+#### Scenario: Fan tries an organizer route
+- **WHEN** a user with role `FAN` calls `POST /v1/admin/events`
+- **THEN** the gateway answers `403 FORBIDDEN`; only tokens with role `ORGANIZER` reach the admin routes
 
 ### Requirement: F2 - Catalog without touching the transactional database
 The Catalog Service SHALL answer catalog and availability reads from `catalog-cache` and SHALL never read `booking-db`.
