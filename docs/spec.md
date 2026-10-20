@@ -1,7 +1,7 @@
 # FlashTix - API and Contract Specification (OpenSpec)
 
 - **Version:** 1.0.0 (Wave 1) · **Date:** 2026-10-13 · **Status:** Draft
-- **Related:** [ADR 001 - Use of Redis](adrs/001-use-of-redis.md) · [C4 Level 2 diagram](assets/c4-container-diagram.png)
+- **Related:** [ADR 001 - Use of Redis](adrs/001-use-of-redis.md) · [C4 Level 2 diagram](assets/c4-container-diagram.jpg)
 
 FlashTix sells concert tickets to up to 500,000 fans at the same time. The platform SHALL
 serve the catalog without touching the transactional database, control the crowd with a

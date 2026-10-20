@@ -1,8 +1,18 @@
 # ADR 002 - Migration of the transactional database from MySQL to PostgreSQL
  
-**Status:** Proposed
+**Status:** Rejected (2026-10-20)
 **Date:** 2026-10-13
 **Authors:** Carlos Andrés Arteaga, Álvaro Sotelo, Santiago Vallejo, Duvan Leal and Juan Pablo Florez
+
+> **Decision outcome: Rejected.** We keep **MySQL 8** as the transactional database.
+> The overbooking problem is already solved without migrating:
+> - `sold_seats` has `PRIMARY KEY (event_id, seat_id)`, so MySQL itself rejects a second sale of the same seat.
+> - Payment retries are idempotent by `orderId` (unique in `payment-db`) and duplicated events are ignored with `processed_events`.
+> - The checkout saga refunds the payment if the seat was already sold.
+>
+> A migration would add data-migration risk, a new learning curve and a transition period with two databases,
+> without fixing any requirement that the current design leaves open. The analysis below is kept as the record
+> of the option we evaluated. See [ADR 001](001-use-of-redis.md) and [spec.md](../spec.md).
  
 ## In one sentence
 The new microservices store the final sale in PostgreSQL instead of MySQL, because PostgreSQL offers stronger and simpler rules to guarantee that a seat is never sold twice.

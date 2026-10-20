@@ -41,8 +41,11 @@ The solution has to cover five mandatory features:
     ├── spec.md      # API and contract specification (OpenSpec format)
     ├── adrs/        # Architecture Decision Records
     │   ├── 000-template.md
-    │   └── 001-use-of-redis.md
+    │   ├── 001-use-of-redis.md
+    │   ├── 002-Migration-of-the-DB.md
+    │   └── 003-async-payments-rabbitmq.md
     └── assets/      # C4 architecture diagrams (.png / .jpg)
+        └── c4-container-diagram.jpg
 ```
 
 For Wave 2 the source code of the microservices, the API Gateway and `docker-compose.yml` will be added at the root of this repository (monorepo), keeping `docs/` intact.
@@ -52,6 +55,8 @@ For Wave 2 the source code of the microservices, the API Gateway and `docker-com
 | ADR | Title | Status |
 | --- | --- | --- |
 | [001](docs/adrs/001-use-of-redis.md) | Use of Redis (catalog read cache and seat soft reservation with TTL) | Accepted |
+| [002](docs/adrs/002-Migration-of-the-DB.md) | Migration of the transactional database from MySQL to PostgreSQL | Rejected |
+| [003](docs/adrs/003-async-payments-rabbitmq.md) | Asynchronous payment processing with RabbitMQ (checkout saga) | Accepted |
 
 New ADRs start from [`docs/adrs/000-template.md`](docs/adrs/000-template.md).
 
