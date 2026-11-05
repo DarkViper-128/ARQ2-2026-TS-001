@@ -37,8 +37,11 @@ The solution has to cover five mandatory features:
 ```text
 .
 ├── README.md
+├── docker-compose.yml   # base infrastructure (databases, caches, broker)
+├── .env.example         # template for the local .env (never commit .env)
 └── docs/
     ├── spec.md      # API and contract specification (OpenSpec format)
+    ├── infrastructure.md   # how to run and verify the local infrastructure
     ├── adrs/        # Architecture Decision Records
     │   ├── 000-template.md
     │   ├── 001-use-of-redis.md
@@ -49,6 +52,21 @@ The solution has to cover five mandatory features:
 ```
 
 For Wave 2 the source code of the microservices, the API Gateway and `docker-compose.yml` will be added at the root of this repository (monorepo), keeping `docs/` intact.
+
+## Run locally
+
+Requires Docker Desktop. From the root of the repository:
+
+```bash
+cp .env.example .env      # Windows PowerShell: copy .env.example .env
+# edit .env and replace every "change-me"
+docker compose up -d
+docker compose ps         # every service must be "healthy"
+```
+
+This starts the base infrastructure: two MySQL databases, two Redis instances (`catalog-cache` and `hold-store`) and RabbitMQ
+(management UI at <http://localhost:15672>). Stop it with `docker compose down`.
+See [docs/infrastructure.md](docs/infrastructure.md) for the services, ports, verification commands and troubleshooting.
 
 ## Architecture Decision Records
 
@@ -62,8 +80,8 @@ New ADRs start from [`docs/adrs/000-template.md`](docs/adrs/000-template.md).
 
 ## Project phases
 
-- **Wave 1 - Planning, Design and Specification (in progress):** Tech Spec (DDD analysis, C4 container diagram, ADRs) and `docs/spec.md`.
-- **Wave 2 - Execution and Implementation:** containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
+- **Wave 1 - Planning, Design and Specification (done):** Tech Spec (DDD analysis, C4 container diagram, ADRs) and `docs/spec.md`.
+- **Wave 2 - Execution and Implementation (in progress):** base infrastructure with Docker Compose is in place; next are the first end-to-end flow (API Gateway, one service and an asynchronous event) and the observability stack. Target: containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
 
 ## Conventions
 
