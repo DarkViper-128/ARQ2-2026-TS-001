@@ -1,0 +1,113 @@
+# FlashTix - base infrastructure (Wave 2, step 1)
+# Containers taken from the C4 Level 2 diagram (docs/assets/c4-container-diagram.jpg).
+# Services (catalog, reservation, order...) are added in later steps.
+#
+# Usage:
+#   cp .env.example .env
+#   docker compose up -d
+#   docker compose ps
+
+name: flashtix
+
+services:
+  # --- Databases (MySQL 8, one per service that owns data) -------------------
+  catalog-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: catalog
+    ports:
+      - "3307:3306"
+    volumes:
+      - catalog-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [flashtix-net]
+
+  booking-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: booking
+    ports:
+      - "3308:3306"
+    volumes:
+      - booking-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [flashtix-net]
+
+  # --- Redis (ADR 001: two instances with different policies) ----------------
+  # catalog-cache: a cache may evict data (LRU) and needs no persistence.
+  catalog-cache:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [flashtix-net]
+
+  # hold-store: holds must NEVER be evicted (noeviction) and survive a restart (AOF).
+  hold-store:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+      --appendonly yes
+      --appendfsync everysec
+    ports:
+      - "6380:6379"
+    volumes:
+      - hold-store-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [flashtix-net]
+
+  # --- Message broker (ADR 003) ----------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks: [flashtix-net]
+
+networks:
+  flashtix-net:
+
+volumes:
+  catalog-db-data:
+  booking-db-data:
+  hold-store-data:
+  rabbitmq-data:
