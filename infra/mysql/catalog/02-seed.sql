@@ -1,5 +1,5 @@
 -- FlashTix catalog-db seed data (Wave 2, CAT-1).
--- One ON_SALE event with 200 seats: 80 VIP (section A) and 120 GENERAL (section B).
+-- One ON_SALE event with 200 seats: 80 VIP (section A) and 120 GENERAL (section B)
 
 INSERT INTO venues (venue_id, name, city) VALUES
   ('7b1d9e40-0000-4000-8000-000000000001', 'Estadio El Campin', 'Bogota');
