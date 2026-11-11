@@ -1,0 +1,147 @@
+{
+  "realm": "flashtix",
+  "displayName": "FlashTix",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "roles": {
+    "realm": [
+      {
+        "name": "FAN",
+        "description": "Buys tickets"
+      },
+      {
+        "name": "ORGANIZER",
+        "description": "Publishes events and manages refunds"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "flashtix-web",
+      "name": "FlashTix web and mobile client",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "fullScopeAllowed": true
+    }
+  ],
+  "users": [
+    {
+      "username": "fan1",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "fan1@flashtix.test",
+      "firstName": "Ana",
+      "lastName": "Fan",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "fan12345",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "FAN"
+      ]
+    },
+    {
+      "username": "fan2",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "fan2@flashtix.test",
+      "firstName": "Bruno",
+      "lastName": "Fan",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "fan12345",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "FAN"
+      ]
+    },
+    {
+      "username": "organizer1",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "organizer1@flashtix.test",
+      "firstName": "Clara",
+      "lastName": "Organizer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "organizer12345",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ORGANIZER"
+      ]
+    },
+    {
+      "username": "organizer2",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "organizer2@flashtix.test",
+      "firstName": "Diego",
+      "lastName": "Organizer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "organizer12345",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ORGANIZER"
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.keys.KeyProvider": [
+      {
+        "name": "flashtix-rsa",
+        "providerId": "rsa",
+        "subComponents": {},
+        "config": {
+          "privateKey": [
+            "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDpUYw2LlKNF63rdBYwacwJTSwS7bLB7CQUIqHy6BcGxhVa/Yn8M3kv3xPZ+fk/btCNSeqo+HJr1m2NNAWfUBhuoQm6SFhrvCKw/y8kAizWzz537s021N0iPdi/RZZhoj8Wy/LuGKcd79FlaJwm/3lwv5SYSyvomfrQzFtVE5pED+03LL0tZpdHHPA2WXVB9XuvYnav/1qcynkf7VX0OmZaPJxz+Fo16hXJPMZQk//btf3+47cz0JZ1UW7uLg4JG0ldtjHDzzi5tJydoC2ohQwlzA2uIRp2VC/wRdHy5d3d5u0WT6++mLzuyUIqEjkc/NVz7pVknq1OhDDf8+pCazLvAgMBAAECggEBAOC7SHdjlOYL+dyBu2G0dfA7ogk1ZOn+3x154k3LGWrP3v/+mCsRFVhz4XYind5oiX6dxOYuMGAIcQsCIaw7BN2CRZFlX62d0Dh2A10Gr1PU2NHCdW2sCLeTpLNPfrLaCTSXC44ktstSFHo+EbJKfxmHnsQ2G7v2nK0DObGvqPaGHaBcR9zErQc/dsioDXaxhxtU11OYmWUYtj/+uO7VPdWqWO3ceZH0xUuV8KoAtzs/ofAMVeCNsR2L+rBbP6IfJtHFZPItAkCOg92MIihuLQo370Lhba2I3E3sFQZzs9HZCf0UvoqBYOBDZFeqYyUN9d5cByDSVBj7TEx8ViBCiRkCgYEA/KDOruMw13Ymlu6JpmIGCNcU0FbFbHfAJzdWXNS2SwYPNjYeOKNMkMyd6kfoef/H2pLRBiayyDjqOHl/9+jE1UnUyR8y8H6142OZjMNXGwrw3jb7qPXfWx87NB5IyCFXVnoTDlyKRowOuYPrT0Xp0EmMS3uNZ+wm6ZUCtR5JJa0CgYEA7G7DJij4JuXbptDrPiIDyqI8gC5T/ZbMlzJwhADu53nsuIFm6P5Sj8j2GWe4UigH/bdGrb0G9WT1DhYl2Qu2a/aI0Iygcwyy8RgfU82QMPGylJGEGnKe/gyWBMSJ92hf3U/8yHK4fEaO9anJankXzUazETEKqkABSaVRva1udosCgYEA5mbW+aPU+L0WJtN5ERkXfdqDbhulRO7Wfi23A0Uw2K23E+85kthETU+AuppIiXPhVxRNtLl4lqlp3IXbU0OkuQ30FlXxBGvcAX3mHf5OJCjPUyt8TDWqNpX+TeNM59GYsRL27EM0DXFRQJry8kLGIyPg4zrU1bIIL0KqzHrJpaUCgYB03JZ2oR9u0oRMIs1zq4pmOORgkwWOvV+oiBTXGkL7hOc9lzBPj40tZq5Fhl+zs/enL1SvAVSULG93o/jXHBPxryyWsDuKQkecJUkuuddAaebTyk0aaXcuqPfpqV9sO1nO4P9X8GRBgPqecGqOxwW9v+k4YR4dYn+AcEdD0ppb2wKBgGp9D+OX+mawlch6R98nSKLMrZKudE3RGEF44b0GyQOJQEI6HjcK1r4AbE8b5bHPbSNcQ2elAynt7jQhLh8krzRv602lG8hP1ywwfaiz9Oh1+ORIxDphoDZFmn+c5+jh9KPr+jQ2kcs99pCFbUhSRdkIGFKzKnY4FJJSkYyE7+Wi"
+          ],
+          "certificate": [
+            "MIICojCCAYoCCQDKbzS3fBzIkjANBgkqhkiG9w0BAQsFADATMREwDwYDVQQDDAhmbGFzaHRpeDAeFw0yNjExMTEwMjI2NTdaFw0zNjExMDgwMjI2NThaMBMxETAPBgNVBAMMCGZsYXNodGl4MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6VGMNi5SjRet63QWMGnMCU0sEu2ywewkFCKh8ugXBsYVWv2J/DN5L98T2fn5P27QjUnqqPhya9ZtjTQFn1AYbqEJukhYa7wisP8vJAIs1s8+d+7NNtTdIj3Yv0WWYaI/Fsvy7hinHe/RZWicJv95cL+UmEsr6Jn60MxbVROaRA/tNyy9LWaXRxzwNll1QfV7r2J2r/9anMp5H+1V9DpmWjycc/haNeoVyTzGUJP/27X9/uO3M9CWdVFu7i4OCRtJXbYxw884ubScnaAtqIUMJcwNriEadlQv8EXR8uXd3ebtFk+vvpi87slCKhI5HPzVc+6VZJ6tToQw3/PqQmsy7wIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQAue4itwgQ4nkJoBpwSsMmBsQDgEkdQ8xhjsCqrCKRJTg6o3Am+MsuPjzFVFFpE4KfSJm2877RV2TdoC8MyLouldala43oAvuN2G+hQK4CzAU/e2VvVuz8oGbvZUouyEcB2aYFPsAPVddPwMC5pqFmgYj7et/H2pmDTX/NuYvxDblB+KPBmCajB9B0SBoewVws1CLztwkVCCN3pyp8L4cf11kA3t4ONwE5I0BlkC0m+6vUEQaIR9WL6/8vT2KQLyo1c7FgPshIaKh5wiNnGLAdCHv+Vu/Ona5Ex+wI1OkQwlxNmYXL7tSjfgpl0ANXOJ+JqCpvsL86QLId8SAAK/13T"
+          ],
+          "priority": [
+            "200"
+          ],
+          "algorithm": [
+            "RS256"
+          ],
+          "active": [
+            "true"
+          ],
+          "enabled": [
+            "true"
+          ],
+          "keyUse": [
+            "SIG"
+          ]
+        }
+      }
+    ]
+  }
+}

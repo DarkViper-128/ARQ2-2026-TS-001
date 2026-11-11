@@ -17,9 +17,15 @@ export interface ProcessedEvents {
   markProcessed(consumer: string, eventId: string): Promise<void>;
 }
 
-/** Anything that can run a parameterised query: a mysql2 pool, connection or transaction. */
+/**
+ * Anything that can run a parameterised query: a mysql2 pool, connection or transaction.
+ *
+ * The signature is deliberately loose. mysql2 declares `execute` with several overloads
+ * and a generic result type, and a stricter interface here would reject a plain `Pool`.
+ */
 export interface QueryExecutor {
-  execute(sql: string, values?: unknown[]): Promise<unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  execute(sql: string, values?: any): Promise<any>;
 }
 
 /**

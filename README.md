@@ -39,21 +39,29 @@ The solution has to cover five mandatory features:
 ├── README.md
 ├── package.json         # npm workspaces root
 ├── tsconfig.base.json   # compiler options shared by every package
-├── docker-compose.yml   # local infrastructure
+├── docker-compose.yml   # local infrastructure and services
 ├── .env.example         # template for the local .env (never commit .env)
 ├── libs/
-│   └── shared/          # @flashtix/shared: events, errors, correlation id
-├── services/            # the seven microservices (added from Phase 1 on)
+│   ├── shared/          # @flashtix/shared: events, errors, correlation id
+│   └── nest-support/    # @flashtix/nest-support: problem+json filter, request identity
+├── services/
+│   ├── catalog/         # events and seat availability (read-only)
+│   └── reservation/     # soft seat holds with TTL
 ├── tools/
 │   └── payment-gateway-mock/   # stand-in for the legacy payment gateway
 ├── infra/
+│   ├── keycloak/        # realm, roles and test users
+│   ├── kong/            # API Gateway declarative configuration
+│   ├── mysql/           # schema and seed data per database
 │   └── rabbitmq/        # broker config and generated topology
 ├── proto/               # gRPC contracts between services
+├── scripts/             # smoke tests
 └── docs/
     ├── spec.md             # API and contract specification (OpenSpec format)
     ├── monorepo.md         # code layout, shared library and Docker build rule
-    ├── infrastructure.md   # how to run and verify the local infrastructure
+    ├── infrastructure.md   # how to run and verify everything locally
     ├── adrs/               # Architecture Decision Records
+    ├── spikes/             # findings that justify a technical choice
     └── assets/             # C4 architecture diagrams (.png / .jpg)
 ```
 
@@ -71,12 +79,18 @@ docker compose up -d --build
 docker compose ps         # every service must be "healthy"
 ```
 
-This starts the base infrastructure: five MySQL databases, two Redis instances
-(`catalog-cache` and `hold-store`), RabbitMQ with its full topology
-(management UI at <http://localhost:15672>), S3 storage for the ticket PDFs, Mailpit for
-the outgoing email (<http://localhost:8025>) and a mock of the legacy payment gateway.
+This starts the infrastructure (five MySQL databases, two Redis instances, RabbitMQ with
+its full topology, S3 storage, Mailpit and the payment gateway mock) and the first
+services: Keycloak, the Kong API Gateway, the Catalog Service and the Reservation Service.
 The containers ending in `-init` set things up and exit, so `exited (0)` is expected.
 Stop everything with `docker compose down`.
+
+**All client traffic goes through the gateway on <http://localhost:8000>.** Check the
+first end-to-end flow with:
+
+```bash
+./scripts/smoke-phase1.sh
+```
 
 To build the code:
 
@@ -102,7 +116,7 @@ New ADRs start from [`docs/adrs/000-template.md`](docs/adrs/000-template.md).
 ## Project phases
 
 - **Wave 1 - Planning, Design and Specification (done):** Tech Spec (DDD analysis, C4 container diagram, ADRs) and `docs/spec.md`.
-- **Wave 2 - Execution and Implementation (in progress):** Phase 0 is complete - monorepo skeleton, shared library, RabbitMQ topology, object storage, mail catcher and payment gateway mock all run from `docker compose up -d`. Next is the first end-to-end flow (API Gateway, one service and an asynchronous event), then the remaining services and the observability stack. Target: containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
+- **Wave 2 - Execution and Implementation (in progress):** Phase 0 (monorepo skeleton, shared library, RabbitMQ topology, object storage, mail catcher, payment gateway mock) and Phase 1 (Keycloak, Kong as the single entry point, Catalog Service, Reservation Service and the first event-driven flow) are complete and covered by `scripts/smoke-phase1.sh`. Next are the Waiting Room, the Order Service and the checkout saga, then the remaining services and the observability stack. Target: containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
 
 ## Conventions
 

@@ -1,0 +1,67 @@
+# FlashTix API Gateway - declarative configuration (Wave 2, GW-1 and GW-2).
+# Kong runs DB-less: this file IS the configuration. Reload with
+#   docker compose restart api-gateway
+#
+# The gateway is the single entry point. Public catalog reads pass through; anything that
+# touches a seat requires a valid Keycloak JWT.
+_format_version: "3.0"
+
+services:
+  - name: catalog
+    url: http://catalog:3000
+    retries: 2
+    connect_timeout: 2000
+    read_timeout: 5000
+    routes:
+      # Public: browsing the catalog never requires a login (spec.md section 4).
+      - name: catalog-events
+        paths:
+          - /v1/events
+        strip_path: false
+        methods: [GET]
+
+  - name: reservation
+    url: http://reservation:3000
+    retries: 0            # a hold is not safe to retry blindly: it would take seats twice
+    connect_timeout: 2000
+    read_timeout: 5000
+    routes:
+      - name: reservation-holds
+        paths:
+          - /v1/holds
+        strip_path: false
+        plugins:
+          # GW-2: RS256 signature check against the realm key. A request without a valid
+          # token is rejected here and never reaches the service.
+          - name: jwt
+            config:
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
+              run_on_preflight: true
+
+consumers:
+  # One consumer stands for "any user Keycloak vouched for". Roles are enforced per route
+  # later (GW-3), not here.
+  - username: keycloak-flashtix
+    jwt_secrets:
+      - key: "http://localhost:8080/realms/flashtix"
+        algorithm: RS256
+        rsa_public_key: |
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6VGMNi5SjRet63QWMGnM
+          CU0sEu2ywewkFCKh8ugXBsYVWv2J/DN5L98T2fn5P27QjUnqqPhya9ZtjTQFn1AY
+          bqEJukhYa7wisP8vJAIs1s8+d+7NNtTdIj3Yv0WWYaI/Fsvy7hinHe/RZWicJv95
+          cL+UmEsr6Jn60MxbVROaRA/tNyy9LWaXRxzwNll1QfV7r2J2r/9anMp5H+1V9Dpm
+          Wjycc/haNeoVyTzGUJP/27X9/uO3M9CWdVFu7i4OCRtJXbYxw884ubScnaAtqIUM
+          JcwNriEadlQv8EXR8uXd3ebtFk+vvpi87slCKhI5HPzVc+6VZJ6tToQw3/PqQmsy
+          7wIDAQAB
+          -----END PUBLIC KEY-----
+
+plugins:
+  # Every request gets a correlation id that travels into the services and their events.
+  - name: correlation-id
+    config:
+      header_name: X-Correlation-Id
+      generator: uuid
+      echo_downstream: true

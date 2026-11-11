@@ -1,4 +1,4 @@
-# Local infrastructure (Wave 2 - Phase 0)
+# Local infrastructure (Wave 2 - Phases 0 and 1)
 
 How to run the base infrastructure of FlashTix on a developer machine with Docker Compose.
 It implements the data and messaging containers of the
@@ -16,7 +16,7 @@ For the code layout and how to create a service, see [monorepo.md](monorepo.md).
 - Docker Desktop (includes Docker Compose v2). Check with `docker --version` and `docker compose version`.
 - Docker Desktop must be running before any `docker compose` command.
 - Node.js 20 or newer, only if you want to build the code outside Docker.
-- Free ports: `1025`, `3307`-`3311`, `5672`, `6379`, `6380`, `8025`, `8080`, `9090`, `15672`.
+- Free ports: `1025`, `3001`, `3002`, `3307`-`3311`, `5672`, `6379`, `6380`, `8000`, `8001`, `8025`, `8080`, `8090`, `9000`, `9090`, `15672`.
 - About 6 GB of free RAM when everything is up.
 
 ## Quick start
@@ -56,6 +56,7 @@ Credentials live in `.env`, which is ignored by Git. `.env.example` is the templ
 | `MYSQL_ROOT_PASSWORD` | the five MySQL databases | Root password shared by every MySQL server |
 | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` | `rabbitmq` | Broker credentials |
 | `TICKET_BUCKET` | `ticket-files-init` | S3 bucket created at startup for the ticket PDFs |
+| `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD` | `keycloak` | Admin console at <http://localhost:8080> |
 | `MOCK_LATENCY_MIN_MS` / `MOCK_LATENCY_MAX_MS` | `payment-gateway-mock` | Simulated gateway latency. The real one takes up to 15 s |
 | `MOCK_DECLINE_RATE` / `MOCK_ERROR_RATE` / `MOCK_TIMEOUT_RATE` | `payment-gateway-mock` | Share of charges that are declined, fail or never answer |
 
@@ -78,7 +79,11 @@ Use values without spaces, quotes or `$`. MySQL stores the root password the fir
 | `ticket-files` | `adobe/s3mock:3.12.0` | 9090 (S3) | `ticket-files` | S3 storage for the ticket PDFs |
 | `ticket-files-init` | `adobe/s3mock:3.12.0` | - | - | Creates the bucket once and exits |
 | `mailpit` | `axllent/mailpit:v1.21` | 1025 (SMTP), 8025 (UI) | - | Catches the emails of the Notification Worker. Nothing leaves the machine |
-| `payment-gateway-mock` | built from `tools/` | 8080 | Payment Gateway (external) | Stand-in for the legacy gateway |
+| `payment-gateway-mock` | built from `tools/` | 8090 | Payment Gateway (external) | Stand-in for the legacy gateway |
+| `keycloak` | `quay.io/keycloak/keycloak:26.0` | 8080, 9000 | Identity Provider | Realm `flashtix`, roles FAN and ORGANIZER |
+| `api-gateway` | `kong:3.8` | 8000 (proxy), 8001 (admin) | API Gateway | Single entry point, validates the JWT |
+| `catalog` | built from `services/catalog` | 3001 | Catalog Service | Events and seat availability, read-only |
+| `reservation` | built from `services/reservation` | 3002 | Reservation Service | Soft seat holds with TTL |
 
 All services share the network `flashtix-net`, so containers reach each other by service name
 (for example `hold-store:6379`, `rabbitmq:5672`). The host ports above are only for tools running on your machine.
@@ -174,21 +179,21 @@ Management UI: <http://localhost:15672> (user and password from `.env`).
 Payment gateway mock:
 
 ```bash
-curl -s localhost:8080/health
-curl -s localhost:8080/_mock/config
+curl -s localhost:8090/health
+curl -s localhost:8090/_mock/config
 
 # Force one outcome instead of waiting for the random one
-curl -s -X POST localhost:8080/payments \
+curl -s -X POST localhost:8090/payments \
   -H 'content-type: application/json' -H 'X-Mock-Behavior: succeed' \
   -d '{"orderId":"demo-1","amount":{"amount":90000000,"currency":"COP"}}'
 
 # The same order is never charged twice: the replay is instant
-curl -si -X POST localhost:8080/payments \
+curl -si -X POST localhost:8090/payments \
   -H 'content-type: application/json' \
   -d '{"orderId":"demo-1"}' | grep -i idempotent-replayed
 
 # Make every charge fail, for a failure demo
-curl -s -X PUT localhost:8080/_mock/config \
+curl -s -X PUT localhost:8090/_mock/config \
   -H 'content-type: application/json' -d '{"errorRate":1}'
 ```
 
@@ -224,9 +229,58 @@ curl -s localhost:9090/            # must list the "tickets" bucket
 | `booking-db` with primary and replica | Single instance | Pending |
 | MinIO for the ticket files | `adobe/s3mock`, same S3 API | **Needs a team decision**, see above |
 | Object storage with credentials and persistence | Unauthenticated, in-memory | Development only |
-| Microservices, HAProxy, Kong, Keycloak | Not included | Phase 1 |
+| HAProxy in front of Kong | Not included | Phase 3 (GW-6), optional |
+| Role checks per route, `X-User-Id` set by the gateway | Not included | Phase 3 (GW-3, GW-4) |
+| Waiting Room and the admission token on `POST /holds` | Not included | Phase 2 |
+| Order, Payment, Ticket and Notification services | Not included | Phases 2 and 3 |
 | Prometheus, Loki, Grafana (observability) | Not included | Phase 4 |
 
 If any of these differences becomes a permanent decision (for example, dropping Sentinel or
 keeping SeaweedFS), add or update the corresponding ADR and adjust [`spec.md`](spec.md), as
 required by the Wave 2 guidelines.
+
+## The first end-to-end flow (Phase 1)
+
+Everything below goes through the gateway on port 8000, which is the only port a client
+should ever use.
+
+```bash
+# 1. A fan logs in and gets a token
+TOKEN=$(curl -s -X POST \
+  http://localhost:8080/realms/flashtix/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=flashtix-web \
+  -d username=fan1 -d password=fan12345 | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+
+# 2. Browsing the catalog needs no token
+curl -s "http://localhost:8000/v1/events" | head -c 200
+
+# 3. Holding a seat without a token is rejected by the gateway
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8000/v1/holds \
+  -H 'content-type: application/json' \
+  -d '{"eventId":"3f0c8a52-0000-4000-8000-000000000001","seatIds":["A-01-01"]}'   # 401
+
+# 4. With the token it succeeds
+curl -s -X POST http://localhost:8000/v1/holds \
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"eventId":"3f0c8a52-0000-4000-8000-000000000001","seatIds":["A-01-01"]}'
+
+# 5. The catalog shows that seat as HELD, without ever touching booking-db
+curl -s "http://localhost:8000/v1/events/3f0c8a52-0000-4000-8000-000000000001/seats" \
+  | grep -o '"seatId":"A-01-01","[^}]*' | head -1
+```
+
+`scripts/smoke-phase1.sh` runs this whole flow and checks the results.
+
+### Test users
+
+| Username | Password | Realm role |
+| --- | --- | --- |
+| `fan1`, `fan2` | `fan12345` | `FAN` |
+| `organizer1`, `organizer2` | `organizer12345` | `ORGANIZER` |
+
+### Seeded catalog
+
+`catalog-db` starts with one `ON_SALE` event, `3f0c8a52-0000-4000-8000-000000000001`,
+with 200 seats: `A-01-01` to `A-08-10` (VIP) and `B-01-01` to `B-12-10` (GENERAL).
+The seed only runs when the volume is created, so after changing it you need
+`docker compose down -v`.

@@ -33,6 +33,7 @@ services:
       - "3307:3306"
     volumes:
       - catalog-db-data:/var/lib/mysql
+      - ./infra/mysql/catalog:/docker-entrypoint-initdb.d:ro
 
   booking-db:
     <<: *mysql
@@ -243,13 +244,125 @@ services:
       MOCK_ERROR_RATE: ${MOCK_ERROR_RATE}
       MOCK_TIMEOUT_RATE: ${MOCK_TIMEOUT_RATE}
     ports:
-      - "8080:8080"
+      - "8090:8080"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks: [flashtix-net]
+
+  # --- Identity provider (INF-2) ----------------------------------------------
+  # Realm, roles and test users are imported from infra/keycloak/flashtix-realm.json.
+  # The realm pins its RSA signing key so the gateway can verify tokens with a key we
+  # control instead of one regenerated on every import.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./infra/keycloak/flashtix-realm.json:/opt/keycloak/data/import/flashtix-realm.json:ro
+    ports:
+      - "8080:8080"     # issuer URL pinned in infra/kong/kong.yml
+      - "9000:9000"     # management and health
+    healthcheck:
+      # The Keycloak image ships no curl or wget, so this talks to the port directly.
+      test:
+        - CMD-SHELL
+        - "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q UP <&3"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    networks: [flashtix-net]
+
+  # --- API Gateway (GW-1, GW-2) -----------------------------------------------
+  # Single entry point. DB-less: infra/kong/kong.yml is the whole configuration.
+  api-gateway:
+    image: kong:3.8
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_LOG_LEVEL: notice
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+    volumes:
+      - ./infra/kong/kong.yml:/kong/kong.yml:ro
+    ports:
+      - "8000:8000"     # public API
+      - "8001:8001"     # admin API (read-only in DB-less mode)
+    depends_on:
+      catalog:
+        condition: service_healthy
+      reservation:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [flashtix-net]
+
+  # --- Catalog Service (CAT-1 to CAT-5) ----------------------------------------
+  catalog:
+    build:
+      context: .
+      dockerfile: services/catalog/Dockerfile
+    environment:
+      PORT: 3000
+      CATALOG_DB_HOST: catalog-db
+      CATALOG_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      CATALOG_CACHE_URL: redis://catalog-cache:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+    ports:
+      - "3001:3000"
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      catalog-cache:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [flashtix-net]
+
+  # --- Reservation Service (RES-1, RES-2, RES-3, RES-6) -------------------------
+  reservation:
+    build:
+      context: .
+      dockerfile: services/reservation/Dockerfile
+    environment:
+      PORT: 3000
+      HOLD_STORE_URL: redis://hold-store:6379
+      HOLD_TTL_SECONDS: 600
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+    ports:
+      - "3002:3000"
+    depends_on:
+      hold-store:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     networks: [flashtix-net]
 
 networks:
