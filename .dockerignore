@@ -4,5 +4,5 @@
 .git
 .env
 docs
-proto
 infra
+# proto/ is NOT ignored: Reservation and Order load the gRPC contract at runtime.

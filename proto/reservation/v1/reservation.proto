@@ -8,8 +8,9 @@ import "google/protobuf/timestamp.proto";
 //
 // Why gRPC and not an event: `POST /orders` has to know *before* it answers whether the
 // seats are still the caller's. That answer must be synchronous, which rules out the bus.
-// It is the only synchronous service-to-service call in FlashTix; everything after the
-// checkout is asynchronous (ADR 003).
+// It is the only synchronous call that CHANGES state in another service; the other
+// internal calls are read-only reads of the Catalog (prices for the order, sale status for
+// the virtual queue). Everything after the checkout is asynchronous (ADR 003).
 //
 // The call is NOT routed through the API Gateway: the gateway is the single entry point
 // for clients, while this is internal traffic inside the Docker network.
@@ -64,8 +65,7 @@ message LockHoldResponse {
 // 300 s comfortably covers the worst payment attempt allowed by spec.md section 7:
 // a 20 s gateway timeout plus retries at 2 s, 10 s and 30 s.
 //
-// docs/spec.md describes this as "TTL extended to 300 s"; the wording is being corrected
-// to match this rule.
+// docs/spec.md section 4 (POST /orders) states the same rule.
 //
 // ---------------------------------------------------------------------------
 // Errors (gRPC status codes; no error payload in the response message)
