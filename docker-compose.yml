@@ -1,0 +1,265 @@
+# FlashTix - base infrastructure (Wave 2, Phase 0)
+# Containers taken from the C4 Level 2 diagram (docs/assets/c4-container-diagram.jpg).
+# The microservices themselves are added in Phase 1; what runs here is everything they
+# need in order to be built and demoed: databases, caches, broker, object storage,
+# a mail catcher and a stand-in for the legacy payment gateway.
+#
+# Usage:
+#   cp .env.example .env
+#   docker compose up -d
+#   docker compose ps
+
+name: flashtix
+
+# Every MySQL database is configured the same way; only the name and port change.
+x-mysql: &mysql
+  image: mysql:8.4
+  healthcheck:
+    test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+    interval: 10s
+    timeout: 5s
+    retries: 10
+    start_period: 30s
+  networks: [flashtix-net]
+
+services:
+  # --- Databases (MySQL 8, one per service that owns data) -------------------
+  catalog-db:
+    <<: *mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: catalog
+    ports:
+      - "3307:3306"
+    volumes:
+      - catalog-db-data:/var/lib/mysql
+
+  booking-db:
+    <<: *mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: booking
+    ports:
+      - "3308:3306"
+    volumes:
+      - booking-db-data:/var/lib/mysql
+
+  payment-db:
+    <<: *mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: payment
+    ports:
+      - "3309:3306"
+    volumes:
+      - payment-db-data:/var/lib/mysql
+
+  ticket-db:
+    <<: *mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ticket
+    ports:
+      - "3310:3306"
+    volumes:
+      - ticket-db-data:/var/lib/mysql
+
+  notification-db:
+    <<: *mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: notification
+    ports:
+      - "3311:3306"
+    volumes:
+      - notification-db-data:/var/lib/mysql
+
+  # --- Redis (ADR 001: two instances with different policies) ----------------
+  # catalog-cache: a cache may evict data (LRU) and needs no persistence.
+  catalog-cache:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [flashtix-net]
+
+  # hold-store: holds must NEVER be evicted (noeviction) and survive a restart (AOF).
+  hold-store:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+      --appendonly yes
+      --appendfsync everysec
+    ports:
+      - "6380:6379"
+    volumes:
+      - hold-store-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [flashtix-net]
+
+  # --- Message broker (ADR 003, INF-4) ---------------------------------------
+  # The topology (exchanges, quorum queues, retry ladder and DLQs) lives in
+  # definitions.json, generated with "npm run rabbitmq:definitions" and imported by the
+  # rabbitmq-init container below.
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/10-flashtix.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks: [flashtix-net]
+
+  # Imports the topology once the broker answers, then exits ("exited (0)" is expected).
+  # Re-importing is harmless, so this runs again on every "docker compose up".
+  rabbitmq-init:
+    image: rabbitmq:3.13-management-alpine
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    volumes:
+      - ./infra/rabbitmq/definitions.json:/definitions.json:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        for i in $$(seq 1 30); do
+          if rabbitmqadmin -H rabbitmq -u "$$RABBITMQ_USER" -p "$$RABBITMQ_PASSWORD" import /definitions.json; then
+            echo "topology imported"
+            exit 0
+          fi
+          echo "waiting for the management API..."
+          sleep 2
+        done
+        echo "could not import the topology"
+        exit 1
+    restart: "no"
+    networks: [flashtix-net]
+
+  # --- Object storage for ticket PDFs (INF-3) --------------------------------
+  # S3-compatible store for the ticket PDFs (C4 container "ticket-files").
+  # NOTE: the design documents say MinIO, but MinIO no longer publishes a community
+  # image that can be pulled without credentials. This is an S3 stand-in for
+  # development; the service name stays implementation-neutral so that moving to real
+  # object storage is a change of image. See docs/infrastructure.md.
+  ticket-files:
+    image: adobe/s3mock:3.12.0
+    environment:
+      debug: "false"
+    ports:
+      - "9090:9090"     # S3 API
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [flashtix-net]
+
+  # Creates the bucket once and exits. "docker compose ps" shows it as "exited (0)".
+  # Uses node because the busybox wget in the other images cannot send a PUT.
+  ticket-files-init:
+    image: node:20-alpine
+    depends_on:
+      ticket-files:
+        condition: service_healthy
+    environment:
+      TICKET_BUCKET: ${TICKET_BUCKET}
+    entrypoint:
+      - node
+      - -e
+      - |
+        const req = require('http').request(
+          { host: 'ticket-files', port: 9090, path: '/' + process.env.TICKET_BUCKET, method: 'PUT' },
+          (res) => {
+            const ok = res.statusCode < 400;
+            console.log((ok ? 'bucket ready: ' : 'could not create bucket: ') + process.env.TICKET_BUCKET + ' (HTTP ' + res.statusCode + ')');
+            process.exit(ok ? 0 : 1);
+          },
+        );
+        req.on('error', (err) => { console.error(err.message); process.exit(1); });
+        req.end();
+    restart: "no"
+    networks: [flashtix-net]
+
+  # --- Mail catcher (INF-6) ---------------------------------------------------
+  # The Notification Worker sends SMTP here in development; nothing leaves the machine.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "1025:1025"     # SMTP
+      - "8025:8025"     # web UI
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [flashtix-net]
+
+  # --- Legacy payment gateway mock (INF-5) ------------------------------------
+  # Built from the monorepo: proves that a service can import @flashtix/shared.
+  payment-gateway-mock:
+    build:
+      context: .
+      dockerfile: tools/payment-gateway-mock/Dockerfile
+    environment:
+      MOCK_PORT: 8080
+      MOCK_LATENCY_MIN_MS: ${MOCK_LATENCY_MIN_MS}
+      MOCK_LATENCY_MAX_MS: ${MOCK_LATENCY_MAX_MS}
+      MOCK_DECLINE_RATE: ${MOCK_DECLINE_RATE}
+      MOCK_ERROR_RATE: ${MOCK_ERROR_RATE}
+      MOCK_TIMEOUT_RATE: ${MOCK_TIMEOUT_RATE}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [flashtix-net]
+
+networks:
+  flashtix-net:
+
+volumes:
+  catalog-db-data:
+  booking-db-data:
+  payment-db-data:
+  ticket-db-data:
+  notification-db-data:
+  hold-store-data:
+  rabbitmq-data:

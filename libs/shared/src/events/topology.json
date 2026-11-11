@@ -1,0 +1,25 @@
+{
+  "$comment": "Canonical RabbitMQ topology for FlashTix. Single source of truth for the shared library and for infra/rabbitmq/generate-definitions.mjs. Mirrors docs/spec.md section 5.",
+  "vhost": "/",
+  "dlx": "flashtix.dlx",
+  "retryReturnExchange": "flashtix.retry.return",
+  "retryTiers": [
+    { "exchange": "flashtix.retry.1s", "queue": "flashtix.retry.1s", "delayMs": 1000 },
+    { "exchange": "flashtix.retry.10s", "queue": "flashtix.retry.10s", "delayMs": 10000 },
+    { "exchange": "flashtix.retry.60s", "queue": "flashtix.retry.60s", "delayMs": 60000 }
+  ],
+  "domainExchanges": ["reservation", "order", "payment", "ticket"],
+  "events": [
+    { "name": "seat.held",         "exchange": "reservation", "producer": "reservation",     "consumers": ["catalog"] },
+    { "name": "seat.released",     "exchange": "reservation", "producer": "reservation",     "consumers": ["catalog"] },
+    { "name": "payment.requested", "exchange": "order",       "producer": "order",           "consumers": ["payment-worker"] },
+    { "name": "payment.succeeded", "exchange": "payment",     "producer": "payment-worker",  "consumers": ["order"] },
+    { "name": "payment.failed",    "exchange": "payment",     "producer": "payment-worker",  "consumers": ["order"] },
+    { "name": "refund.requested",  "exchange": "order",       "producer": "order",           "consumers": ["payment-worker"] },
+    { "name": "refund.completed",  "exchange": "payment",     "producer": "payment-worker",  "consumers": ["order"] },
+    { "name": "order.confirmed",   "exchange": "order",       "producer": "order",           "consumers": ["ticket", "catalog", "reservation"] },
+    { "name": "order.failed",      "exchange": "order",       "producer": "order",           "consumers": ["reservation", "notification"] },
+    { "name": "order.cancelled",   "exchange": "order",       "producer": "order",           "consumers": ["notification"] },
+    { "name": "ticket.issued",     "exchange": "ticket",      "producer": "ticket",          "consumers": ["notification"] }
+  ]
+}

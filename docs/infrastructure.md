@@ -1,0 +1,232 @@
+# Local infrastructure (Wave 2 - Phase 0)
+
+How to run the base infrastructure of FlashTix on a developer machine with Docker Compose.
+It implements the data and messaging containers of the
+[C4 Level 2 diagram](assets/c4-container-diagram.jpg), following
+[ADR 001](adrs/001-use-of-redis.md) (two Redis instances) and
+[ADR 003](adrs/003-async-payments-rabbitmq.md) (RabbitMQ), plus everything the services
+need in order to be built and demoed: object storage, a mail catcher and a stand-in for
+the legacy payment gateway.
+
+The microservices, the API Gateway and the observability stack are added in later phases.
+For the code layout and how to create a service, see [monorepo.md](monorepo.md).
+
+## Requirements
+
+- Docker Desktop (includes Docker Compose v2). Check with `docker --version` and `docker compose version`.
+- Docker Desktop must be running before any `docker compose` command.
+- Node.js 20 or newer, only if you want to build the code outside Docker.
+- Free ports: `1025`, `3307`-`3311`, `5672`, `6379`, `6380`, `8025`, `8080`, `9090`, `15672`.
+- About 6 GB of free RAM when everything is up.
+
+## Quick start
+
+```bash
+cp .env.example .env      # Windows PowerShell: copy .env.example .env
+# edit .env and replace every "change-me"
+docker compose up -d --build
+docker compose ps         # every service must be "healthy"
+```
+
+The first start downloads the images and builds the payment gateway mock, so it can take
+several minutes. Later starts take seconds.
+
+`rabbitmq-init` and `ticket-files-init` are one-shot containers: they set up the broker
+topology and the S3 bucket and then exit, so seeing them as `exited (0)` is the expected
+result, not a failure.
+
+Stop everything (data is kept in volumes):
+
+```bash
+docker compose down
+```
+
+Stop and **delete all data** (databases, holds, queues, ticket files):
+
+```bash
+docker compose down -v
+```
+
+## Configuration
+
+Credentials live in `.env`, which is ignored by Git. `.env.example` is the template that is committed.
+
+| Variable | Used by | Description |
+| --- | --- | --- |
+| `MYSQL_ROOT_PASSWORD` | the five MySQL databases | Root password shared by every MySQL server |
+| `RABBITMQ_USER` / `RABBITMQ_PASSWORD` | `rabbitmq` | Broker credentials |
+| `TICKET_BUCKET` | `ticket-files-init` | S3 bucket created at startup for the ticket PDFs |
+| `MOCK_LATENCY_MIN_MS` / `MOCK_LATENCY_MAX_MS` | `payment-gateway-mock` | Simulated gateway latency. The real one takes up to 15 s |
+| `MOCK_DECLINE_RATE` / `MOCK_ERROR_RATE` / `MOCK_TIMEOUT_RATE` | `payment-gateway-mock` | Share of charges that are declined, fail or never answer |
+
+Use values without spaces, quotes or `$`. MySQL stores the root password the first time its volume is created, so if you change
+`MYSQL_ROOT_PASSWORD` later you must recreate the volumes with `docker compose down -v`.
+
+## Services
+
+| Service | Image | Host port | C4 container | Purpose |
+| --- | --- | --- | --- | --- |
+| `catalog-db` | `mysql:8.4` | 3307 | `catalog-db` | Events, venues, seats and prices (Catalog Service) |
+| `booking-db` | `mysql:8.4` | 3308 | `booking-db` | Orders, outbox and `sold_seats` (Order Service) |
+| `payment-db` | `mysql:8.4` | 3309 | `payment-db` | Payments, unique per `orderId` (Payment Worker) |
+| `ticket-db` | `mysql:8.4` | 3310 | `ticket-db` | Issued tickets (Ticket Service) |
+| `notification-db` | `mysql:8.4` | 3311 | `notification-db` | Email and push deduplication (Notification Worker) |
+| `catalog-cache` | `redis:7-alpine` | 6379 | `catalog-cache` | Read model of the catalog and availability. LRU, no persistence |
+| `hold-store` | `redis:7-alpine` | 6380 | `hold-store` | Seat holds (`SET NX EX 600`) and virtual queue. AOF, `noeviction` |
+| `rabbitmq` | `rabbitmq:3.13-management-alpine` | 5672 (AMQP), 15672 (UI) | Message Broker | Events between services |
+| `rabbitmq-init` | `rabbitmq:3.13-management-alpine` | - | - | Imports the topology once the broker is healthy, then exits |
+| `ticket-files` | `adobe/s3mock:3.12.0` | 9090 (S3) | `ticket-files` | S3 storage for the ticket PDFs |
+| `ticket-files-init` | `adobe/s3mock:3.12.0` | - | - | Creates the bucket once and exits |
+| `mailpit` | `axllent/mailpit:v1.21` | 1025 (SMTP), 8025 (UI) | - | Catches the emails of the Notification Worker. Nothing leaves the machine |
+| `payment-gateway-mock` | built from `tools/` | 8080 | Payment Gateway (external) | Stand-in for the legacy gateway |
+
+All services share the network `flashtix-net`, so containers reach each other by service name
+(for example `hold-store:6379`, `rabbitmq:5672`). The host ports above are only for tools running on your machine.
+Every long-running service has a `healthcheck`, so later services can wait for them with `depends_on: condition: service_healthy`.
+
+The five MySQL services share one YAML anchor (`x-mysql`), so a change to the image or the
+healthcheck is made once instead of five times.
+
+### Why two Redis instances (ADR 001)
+
+| Instance | Eviction policy | Persistence | Reason |
+| --- | --- | --- | --- |
+| `catalog-cache` | `allkeys-lru` | none | A cache can drop old entries when it is full and be rebuilt from MySQL |
+| `hold-store` | `noeviction` | AOF, `everysec` | A hold must never be dropped: if it disappeared, the seat would look free while someone is paying. With AOF a restart loses at most 1 second |
+
+### Object storage: an S3 stand-in instead of MinIO
+
+The Tech Spec, the C4 diagram and `spec.md` name **MinIO** as the object store. MinIO no
+longer publishes a community image that can be pulled without credentials
+(`docker pull minio/minio` fails with *pull access denied*), and the same is now true of
+`bitnami/minio`. SeaweedFS was tried next but its master node failed to elect a leader
+reliably on restart, which is not something the team should have to debug.
+
+The compose therefore uses **`adobe/s3mock`**: it speaks the S3 API, starts in about a
+second and needs no configuration. The compose service is called `ticket-files`, not
+`minio`, precisely so the architecture does not depend on the vendor.
+
+**Two things the team has to decide:**
+
+1. Whether this is acceptable for the demo. It is a stand-in for development, not a real
+   object store: the S3 API is unauthenticated and **files do not survive a restart**.
+   That is tolerable because a ticket PDF can always be regenerated from `order.confirmed`.
+2. If it stays, `spec.md`, the C4 diagram and the ADRs must say "S3-compatible object
+   storage" instead of MinIO, and it is worth a short ADR recording why.
+
+## RabbitMQ topology (INF-4)
+
+The whole topology lives in `infra/rabbitmq/definitions.json`, which is **generated**
+from `libs/shared/src/events/topology.json`:
+
+```bash
+npm run rabbitmq:definitions
+```
+
+Both files are committed. Never edit `definitions.json` by hand: change the topology and
+regenerate, so the broker and the shared library can never disagree.
+
+The file is imported by the `rabbitmq-init` container over the management API once the
+broker is healthy, **not** with RabbitMQ's `load_definitions` setting. That setting looks
+simpler but makes RabbitMQ skip the creation of the `RABBITMQ_DEFAULT_USER` account, and
+the broker ends up with no account at all and refuses every login. Importing afterwards
+keeps the credentials in `.env`, where the rest of the stack has them.
+
+| Element | Value |
+| --- | --- |
+| Domain exchanges | `reservation`, `order`, `payment`, `ticket` (topic, durable) |
+| Consumer queues | `<consumer>.<event>`, quorum, durable - one per consumer and event |
+| Dead-letter queues | `<queue>.dlq`, fed by the `flashtix.dlx` exchange |
+| Retry queues | `flashtix.retry.1s`, `flashtix.retry.10s`, `flashtix.retry.60s` |
+
+**How a retry works.** When a handler throws, the consumer republishes the message to the
+delay exchange of the next tier using **its own queue name as the routing key**. The delay
+queue holds it for its TTL, and because that queue sets no
+`x-dead-letter-routing-key`, the original routing key survives, so
+`flashtix.retry.return` sends the message back to that one queue. The other consumers of
+the same event are never disturbed by someone else's retry. After the third attempt the
+consumer rejects the message without requeue and the broker routes it to `<queue>.dlq`.
+
+## Verify the infrastructure
+
+```bash
+docker compose ps
+```
+
+Redis policies (ADR 001):
+
+```bash
+docker compose exec hold-store redis-cli config get maxmemory-policy      # noeviction
+docker compose exec catalog-cache redis-cli config get maxmemory-policy   # allkeys-lru
+docker compose exec hold-store redis-cli config get appendonly            # yes
+```
+
+RabbitMQ topology, which is the exit criterion of Phase 0:
+
+```bash
+docker compose exec rabbitmq rabbitmqctl list_exchanges name type | grep flashtix
+docker compose exec rabbitmq rabbitmqctl list_queues name type | head -20
+docker compose exec rabbitmq rabbitmqctl list_queues name | grep -c dlq     # 14
+```
+
+Management UI: <http://localhost:15672> (user and password from `.env`).
+
+Payment gateway mock:
+
+```bash
+curl -s localhost:8080/health
+curl -s localhost:8080/_mock/config
+
+# Force one outcome instead of waiting for the random one
+curl -s -X POST localhost:8080/payments \
+  -H 'content-type: application/json' -H 'X-Mock-Behavior: succeed' \
+  -d '{"orderId":"demo-1","amount":{"amount":90000000,"currency":"COP"}}'
+
+# The same order is never charged twice: the replay is instant
+curl -si -X POST localhost:8080/payments \
+  -H 'content-type: application/json' \
+  -d '{"orderId":"demo-1"}' | grep -i idempotent-replayed
+
+# Make every charge fail, for a failure demo
+curl -s -X PUT localhost:8080/_mock/config \
+  -H 'content-type: application/json' -d '{"errorRate":1}'
+```
+
+Mailpit UI: <http://localhost:8025>.
+
+Ticket storage (S3 API):
+
+```bash
+curl -s localhost:9090/            # must list the "tickets" bucket
+```
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `docker` is not recognized | Restart the terminal or VS Code (the PATH is read at startup). Check that Docker Desktop is running |
+| `failed to extract layer ... input/output error` | Docker's disk is full or corrupted. Free disk space, run `docker system prune -f`, restart Docker Desktop and retry |
+| `Access denied for user 'root'` | The password differs from the one MySQL was initialized with. Fix `.env`, then `docker compose down -v` and `docker compose up -d` |
+| A port is already in use | Another program uses it. Stop it or change the host side of `ports` (for example `"3317:3306"`) |
+| `ticket-files-init` or `rabbitmq-init` shows `exited (0)` | Expected. They set things up and stop |
+| RabbitMQ starts but has no queues | The import failed. Check `docker compose logs rabbitmq-init`, then `docker compose up -d rabbitmq-init` to retry |
+| `ACCESS_REFUSED` when a service connects to RabbitMQ | The broker has no users. Check `docker compose exec rabbitmq rabbitmqctl list_users`; if it is empty, make sure `rabbitmq.conf` does **not** set `load_definitions` |
+| A charge to the mock never answers | Expected: `MOCK_TIMEOUT_RATE` simulates the gateway hanging. Send `X-Mock-Behavior: succeed` for a deterministic answer |
+| `LF will be replaced by CRLF` warning on Windows | Harmless. Git normalizes line endings when committing |
+| `docker compose ps` shows `starting` | MySQL and RabbitMQ need up to a minute. Wait and run it again |
+| Everything is slow or the machine swaps | The long-running containers need about 6 GB of RAM. Raise Docker Desktop's memory limit, or stop the databases you are not using |
+
+## Current scope and differences from the target architecture
+
+| Target (C4 / ADR / `spec.md`) | In this compose | Status |
+| --- | --- | --- |
+| `hold-store` with replicas and Sentinel (ADR 001) | Single instance with AOF and `noeviction` | Pending. Single node is enough for development |
+| `booking-db` with primary and replica | Single instance | Pending |
+| MinIO for the ticket files | `adobe/s3mock`, same S3 API | **Needs a team decision**, see above |
+| Object storage with credentials and persistence | Unauthenticated, in-memory | Development only |
+| Microservices, HAProxy, Kong, Keycloak | Not included | Phase 1 |
+| Prometheus, Loki, Grafana (observability) | Not included | Phase 4 |
+
+If any of these differences becomes a permanent decision (for example, dropping Sentinel or
+keeping SeaweedFS), add or update the corresponding ADR and adjust [`spec.md`](spec.md), as
+required by the Wave 2 guidelines.

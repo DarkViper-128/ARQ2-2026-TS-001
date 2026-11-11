@@ -37,18 +37,57 @@ The solution has to cover five mandatory features:
 ```text
 .
 ├── README.md
+├── package.json         # npm workspaces root
+├── tsconfig.base.json   # compiler options shared by every package
+├── docker-compose.yml   # local infrastructure
+├── .env.example         # template for the local .env (never commit .env)
+├── libs/
+│   └── shared/          # @flashtix/shared: events, errors, correlation id
+├── services/            # the seven microservices (added from Phase 1 on)
+├── tools/
+│   └── payment-gateway-mock/   # stand-in for the legacy payment gateway
+├── infra/
+│   └── rabbitmq/        # broker config and generated topology
+├── proto/               # gRPC contracts between services
 └── docs/
-    ├── spec.md      # API and contract specification (OpenSpec format)
-    ├── adrs/        # Architecture Decision Records
-    │   ├── 000-template.md
-    │   ├── 001-use-of-redis.md
-    │   ├── 002-Migration-of-the-DB.md
-    │   └── 003-async-payments-rabbitmq.md
-    └── assets/      # C4 architecture diagrams (.png / .jpg)
-        └── c4-container-diagram.jpg
+    ├── spec.md             # API and contract specification (OpenSpec format)
+    ├── monorepo.md         # code layout, shared library and Docker build rule
+    ├── infrastructure.md   # how to run and verify the local infrastructure
+    ├── adrs/               # Architecture Decision Records
+    └── assets/             # C4 architecture diagrams (.png / .jpg)
 ```
 
 For Wave 2 the source code of the microservices, the API Gateway and `docker-compose.yml` will be added at the root of this repository (monorepo), keeping `docs/` intact.
+
+## Run locally
+
+Requires Docker Desktop, and Node.js 20+ only if you want to build the code outside Docker.
+From the root of the repository:
+
+```bash
+cp .env.example .env      # Windows PowerShell: copy .env.example .env
+# edit .env and replace every "change-me"
+docker compose up -d --build
+docker compose ps         # every service must be "healthy"
+```
+
+This starts the base infrastructure: five MySQL databases, two Redis instances
+(`catalog-cache` and `hold-store`), RabbitMQ with its full topology
+(management UI at <http://localhost:15672>), S3 storage for the ticket PDFs, Mailpit for
+the outgoing email (<http://localhost:8025>) and a mock of the legacy payment gateway.
+The containers ending in `-init` set things up and exit, so `exited (0)` is expected.
+Stop everything with `docker compose down`.
+
+To build the code:
+
+```bash
+npm install
+npm run build
+```
+
+See [docs/infrastructure.md](docs/infrastructure.md) for ports, verification commands and
+troubleshooting, and [docs/monorepo.md](docs/monorepo.md) for the code layout and how to
+add a service.
 
 ## Architecture Decision Records
 
@@ -62,8 +101,8 @@ New ADRs start from [`docs/adrs/000-template.md`](docs/adrs/000-template.md).
 
 ## Project phases
 
-- **Wave 1 - Planning, Design and Specification (in progress):** Tech Spec (DDD analysis, C4 container diagram, ADRs) and `docs/spec.md`.
-- **Wave 2 - Execution and Implementation:** containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
+- **Wave 1 - Planning, Design and Specification (done):** Tech Spec (DDD analysis, C4 container diagram, ADRs) and `docs/spec.md`.
+- **Wave 2 - Execution and Implementation (in progress):** Phase 0 is complete - monorepo skeleton, shared library, RabbitMQ topology, object storage, mail catcher and payment gateway mock all run from `docker compose up -d`. Next is the first end-to-end flow (API Gateway, one service and an asynchronous event), then the remaining services and the observability stack. Target: containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
 
 ## Conventions
 
