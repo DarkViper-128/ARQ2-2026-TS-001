@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS orders (
   request_hash    CHAR(64)     NOT NULL,
   status          ENUM('PENDING','CONFIRMED','FAILED','REFUND_PENDING','CANCELLED') NOT NULL DEFAULT 'PENDING',
   failure_reason  VARCHAR(40)  NULL,
+  -- Filled by payment.succeeded; refund.requested needs them to refund the right charge.
+  payment_id        CHAR(36)    NULL,
+  gateway_reference VARCHAR(64) NULL,
   -- Money in minor units (spec.md section 2).
   total_amount    BIGINT       NOT NULL,
   currency        CHAR(3)      NOT NULL DEFAULT 'COP',
