@@ -127,10 +127,13 @@ Login uses the standard OIDC endpoints of Keycloak (`/realms/flashtix/protocol/o
 ### `POST /orders` - Order (F4)
 - **Auth:** FAN + `Idempotency-Key`
 - **Request body:** `{ "holdId": "uuid", "paymentMethodToken": "tok_..." }` (card tokenized by the gateway SDK; FlashTix never sees card data)
-- **Behavior (saga start):** locks the hold through Reservation (gRPC `LockHold`, TTL extended to 300 s),
-  then in ONE MySQL transaction saves the order as `PENDING` and `payment.requested` in the outbox.
-  It does **not** wait for the payment gateway.
-- **Responses:** `202 Accepted` · `202` + `Idempotent-Replayed: true` (same key repeated) · `400 MISSING_IDEMPOTENCY_KEY` · `404 HOLD_NOT_FOUND` · `409 HOLD_EXPIRED` · `409 IDEMPOTENCY_KEY_REUSED` · `503`
+- **Behavior (saga start):** locks the hold through Reservation (gRPC `LockHold`, expiry set to
+  `max(current expiry, now + 300 s)`), prices the seats with the Catalog Service (never with a price
+  sent by the client), then in ONE MySQL transaction saves the order as `PENDING` and
+  `payment.requested` in the outbox. It does **not** wait for the payment gateway. The order id is
+  derived from the fan and the `Idempotency-Key`, so a client retry after a timeout finishes the
+  same order instead of failing with `HOLD_LOCKED`.
+- **Responses:** `202 Accepted` · `202` + `Idempotent-Replayed: true` (same key repeated) · `400 MISSING_IDEMPOTENCY_KEY` · `404 HOLD_NOT_FOUND` · `409 HOLD_EXPIRED` · `409 HOLD_LOCKED` (the hold belongs to another order) · `409 IDEMPOTENCY_KEY_REUSED` · `503`
 - **Example `202`:**
 
 ```json
