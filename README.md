@@ -46,7 +46,8 @@ The solution has to cover five mandatory features:
 │   └── nest-support/    # @flashtix/nest-support: problem+json filter, request identity
 ├── services/
 │   ├── catalog/         # events and seat availability (read-only)
-│   └── reservation/     # soft seat holds with TTL
+│   ├── reservation/     # soft seat holds with TTL
+│   └── order/           # checkout saga, source of truth for every sale
 ├── tools/
 │   └── payment-gateway-mock/   # stand-in for the legacy payment gateway
 ├── infra/

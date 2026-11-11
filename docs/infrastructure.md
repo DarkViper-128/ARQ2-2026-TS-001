@@ -16,7 +16,7 @@ For the code layout and how to create a service, see [monorepo.md](monorepo.md).
 - Docker Desktop (includes Docker Compose v2). Check with `docker --version` and `docker compose version`.
 - Docker Desktop must be running before any `docker compose` command.
 - Node.js 20 or newer, only if you want to build the code outside Docker.
-- Free ports: `1025`, `3001`, `3002`, `3307`-`3311`, `5672`, `6379`, `6380`, `8000`, `8001`, `8025`, `8080`, `8090`, `9000`, `9090`, `15672`.
+- Free ports: `1025`, `3001`-`3003`, `3307`-`3311`, `5672`, `6379`, `6380`, `8000`, `8001`, `8025`, `8080`, `8090`, `9000`, `9090`, `15672`.
 - About 6 GB of free RAM when everything is up.
 
 ## Quick start
@@ -84,6 +84,13 @@ Use values without spaces, quotes or `$`. MySQL stores the root password the fir
 | `api-gateway` | `kong:3.8` | 8000 (proxy), 8001 (admin) | API Gateway | Single entry point, validates the JWT |
 | `catalog` | built from `services/catalog` | 3001 | Catalog Service | Events and seat availability, read-only |
 | `reservation` | built from `services/reservation` | 3002 | Reservation Service | Soft seat holds with TTL |
+| `order` | built from `services/order` | 3003 | Order Service | Checkout saga and source of truth for every sale |
+
+`booking-db` loads its schema (`orders`, `order_seats`, `sold_seats`, `outbox`,
+`processed_events`) from `infra/mysql/booking` the first time its volume is created. If you
+already had the volume from Phase 0 or 1, recreate it once so the schema is applied:
+`docker compose rm -sf booking-db && docker volume rm flashtix_booking-db-data`, then
+`docker compose up -d`.
 
 All services share the network `flashtix-net`, so containers reach each other by service name
 (for example `hold-store:6379`, `rabbitmq:5672`). The host ports above are only for tools running on your machine.
