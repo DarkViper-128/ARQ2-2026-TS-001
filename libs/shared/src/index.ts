@@ -6,3 +6,4 @@ export * from './events/topology';
 export * from './events/publisher';
 export * from './events/consumer';
 export * from './events/processed-events';
+export * from './auth/admission-token';
