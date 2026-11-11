@@ -1,0 +1,774 @@
+{
+  "rabbit_version": "3.13.7",
+  "rabbitmq_version": "3.13.7",
+  "product_name": "RabbitMQ",
+  "product_version": "3.13.7",
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "parameters": [],
+  "global_parameters": [],
+  "policies": [],
+  "exchanges": [
+    {
+      "name": "reservation",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "order",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "payment",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "ticket",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "flashtix.retry.1s",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "flashtix.retry.10s",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "flashtix.retry.60s",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "flashtix.retry.return",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "flashtix.dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "flashtix.retry.1s",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-message-ttl": 1000,
+        "x-dead-letter-exchange": "flashtix.retry.return"
+      }
+    },
+    {
+      "name": "flashtix.retry.10s",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-message-ttl": 10000,
+        "x-dead-letter-exchange": "flashtix.retry.return"
+      }
+    },
+    {
+      "name": "flashtix.retry.60s",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-message-ttl": 60000,
+        "x-dead-letter-exchange": "flashtix.retry.return"
+      }
+    },
+    {
+      "name": "catalog.seat.held",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "catalog.seat.held.dlq"
+      }
+    },
+    {
+      "name": "catalog.seat.held.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "catalog.seat.released",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "catalog.seat.released.dlq"
+      }
+    },
+    {
+      "name": "catalog.seat.released.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "payment-worker.payment.requested",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "payment-worker.payment.requested.dlq"
+      }
+    },
+    {
+      "name": "payment-worker.payment.requested.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "order.payment.succeeded",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "order.payment.succeeded.dlq"
+      }
+    },
+    {
+      "name": "order.payment.succeeded.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "order.payment.failed",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "order.payment.failed.dlq"
+      }
+    },
+    {
+      "name": "order.payment.failed.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "payment-worker.refund.requested",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "payment-worker.refund.requested.dlq"
+      }
+    },
+    {
+      "name": "payment-worker.refund.requested.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "order.refund.completed",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "order.refund.completed.dlq"
+      }
+    },
+    {
+      "name": "order.refund.completed.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "ticket.order.confirmed",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "ticket.order.confirmed.dlq"
+      }
+    },
+    {
+      "name": "ticket.order.confirmed.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "catalog.order.confirmed",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "catalog.order.confirmed.dlq"
+      }
+    },
+    {
+      "name": "catalog.order.confirmed.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "reservation.order.confirmed",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "reservation.order.confirmed.dlq"
+      }
+    },
+    {
+      "name": "reservation.order.confirmed.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "reservation.order.failed",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "reservation.order.failed.dlq"
+      }
+    },
+    {
+      "name": "reservation.order.failed.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "notification.order.failed",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "notification.order.failed.dlq"
+      }
+    },
+    {
+      "name": "notification.order.failed.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "notification.order.cancelled",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "notification.order.cancelled.dlq"
+      }
+    },
+    {
+      "name": "notification.order.cancelled.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "notification.ticket.issued",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "flashtix.dlx",
+        "x-dead-letter-routing-key": "notification.ticket.issued.dlq"
+      }
+    },
+    {
+      "name": "notification.ticket.issued.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "flashtix.retry.1s",
+      "vhost": "/",
+      "destination": "flashtix.retry.1s",
+      "destination_type": "queue",
+      "routing_key": "#",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.10s",
+      "vhost": "/",
+      "destination": "flashtix.retry.10s",
+      "destination_type": "queue",
+      "routing_key": "#",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.60s",
+      "vhost": "/",
+      "destination": "flashtix.retry.60s",
+      "destination_type": "queue",
+      "routing_key": "#",
+      "arguments": {}
+    },
+    {
+      "source": "reservation",
+      "vhost": "/",
+      "destination": "catalog.seat.held",
+      "destination_type": "queue",
+      "routing_key": "seat.held",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "catalog.seat.held",
+      "destination_type": "queue",
+      "routing_key": "catalog.seat.held",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "catalog.seat.held.dlq",
+      "destination_type": "queue",
+      "routing_key": "catalog.seat.held.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "reservation",
+      "vhost": "/",
+      "destination": "catalog.seat.released",
+      "destination_type": "queue",
+      "routing_key": "seat.released",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "catalog.seat.released",
+      "destination_type": "queue",
+      "routing_key": "catalog.seat.released",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "catalog.seat.released.dlq",
+      "destination_type": "queue",
+      "routing_key": "catalog.seat.released.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "order",
+      "vhost": "/",
+      "destination": "payment-worker.payment.requested",
+      "destination_type": "queue",
+      "routing_key": "payment.requested",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "payment-worker.payment.requested",
+      "destination_type": "queue",
+      "routing_key": "payment-worker.payment.requested",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "payment-worker.payment.requested.dlq",
+      "destination_type": "queue",
+      "routing_key": "payment-worker.payment.requested.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "payment",
+      "vhost": "/",
+      "destination": "order.payment.succeeded",
+      "destination_type": "queue",
+      "routing_key": "payment.succeeded",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "order.payment.succeeded",
+      "destination_type": "queue",
+      "routing_key": "order.payment.succeeded",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "order.payment.succeeded.dlq",
+      "destination_type": "queue",
+      "routing_key": "order.payment.succeeded.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "payment",
+      "vhost": "/",
+      "destination": "order.payment.failed",
+      "destination_type": "queue",
+      "routing_key": "payment.failed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "order.payment.failed",
+      "destination_type": "queue",
+      "routing_key": "order.payment.failed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "order.payment.failed.dlq",
+      "destination_type": "queue",
+      "routing_key": "order.payment.failed.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "order",
+      "vhost": "/",
+      "destination": "payment-worker.refund.requested",
+      "destination_type": "queue",
+      "routing_key": "refund.requested",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "payment-worker.refund.requested",
+      "destination_type": "queue",
+      "routing_key": "payment-worker.refund.requested",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "payment-worker.refund.requested.dlq",
+      "destination_type": "queue",
+      "routing_key": "payment-worker.refund.requested.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "payment",
+      "vhost": "/",
+      "destination": "order.refund.completed",
+      "destination_type": "queue",
+      "routing_key": "refund.completed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "order.refund.completed",
+      "destination_type": "queue",
+      "routing_key": "order.refund.completed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "order.refund.completed.dlq",
+      "destination_type": "queue",
+      "routing_key": "order.refund.completed.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "order",
+      "vhost": "/",
+      "destination": "ticket.order.confirmed",
+      "destination_type": "queue",
+      "routing_key": "order.confirmed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "ticket.order.confirmed",
+      "destination_type": "queue",
+      "routing_key": "ticket.order.confirmed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "ticket.order.confirmed.dlq",
+      "destination_type": "queue",
+      "routing_key": "ticket.order.confirmed.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "order",
+      "vhost": "/",
+      "destination": "catalog.order.confirmed",
+      "destination_type": "queue",
+      "routing_key": "order.confirmed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "catalog.order.confirmed",
+      "destination_type": "queue",
+      "routing_key": "catalog.order.confirmed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "catalog.order.confirmed.dlq",
+      "destination_type": "queue",
+      "routing_key": "catalog.order.confirmed.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "order",
+      "vhost": "/",
+      "destination": "reservation.order.confirmed",
+      "destination_type": "queue",
+      "routing_key": "order.confirmed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "reservation.order.confirmed",
+      "destination_type": "queue",
+      "routing_key": "reservation.order.confirmed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "reservation.order.confirmed.dlq",
+      "destination_type": "queue",
+      "routing_key": "reservation.order.confirmed.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "order",
+      "vhost": "/",
+      "destination": "reservation.order.failed",
+      "destination_type": "queue",
+      "routing_key": "order.failed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "reservation.order.failed",
+      "destination_type": "queue",
+      "routing_key": "reservation.order.failed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "reservation.order.failed.dlq",
+      "destination_type": "queue",
+      "routing_key": "reservation.order.failed.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "order",
+      "vhost": "/",
+      "destination": "notification.order.failed",
+      "destination_type": "queue",
+      "routing_key": "order.failed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "notification.order.failed",
+      "destination_type": "queue",
+      "routing_key": "notification.order.failed",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "notification.order.failed.dlq",
+      "destination_type": "queue",
+      "routing_key": "notification.order.failed.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "order",
+      "vhost": "/",
+      "destination": "notification.order.cancelled",
+      "destination_type": "queue",
+      "routing_key": "order.cancelled",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "notification.order.cancelled",
+      "destination_type": "queue",
+      "routing_key": "notification.order.cancelled",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "notification.order.cancelled.dlq",
+      "destination_type": "queue",
+      "routing_key": "notification.order.cancelled.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "ticket",
+      "vhost": "/",
+      "destination": "notification.ticket.issued",
+      "destination_type": "queue",
+      "routing_key": "ticket.issued",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.retry.return",
+      "vhost": "/",
+      "destination": "notification.ticket.issued",
+      "destination_type": "queue",
+      "routing_key": "notification.ticket.issued",
+      "arguments": {}
+    },
+    {
+      "source": "flashtix.dlx",
+      "vhost": "/",
+      "destination": "notification.ticket.issued.dlq",
+      "destination_type": "queue",
+      "routing_key": "notification.ticket.issued.dlq",
+      "arguments": {}
+    }
+  ]
+}

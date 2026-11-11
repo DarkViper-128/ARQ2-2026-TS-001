@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package flashtix.reservation.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Contract between the Order Service and the Reservation Service (Wave 2, Phase 0).
+//
+// Why gRPC and not an event: `POST /orders` has to know *before* it answers whether the
+// seats are still the caller's. That answer must be synchronous, which rules out the bus.
+// It is the only synchronous service-to-service call in FlashTix; everything after the
+// checkout is asynchronous (ADR 003).
+//
+// The call is NOT routed through the API Gateway: the gateway is the single entry point
+// for clients, while this is internal traffic inside the Docker network.
+service ReservationService {
+  // Binds an ACTIVE hold to an order and pushes its expiry far enough out to cover the
+  // whole payment attempt. Idempotent: calling it again with the same
+  // (hold_id, order_id) returns the same answer instead of failing.
+  rpc LockHold(LockHoldRequest) returns (LockHoldResponse);
+}
+
+message LockHoldRequest {
+  // Hold created by POST /holds. Required.
+  string hold_id = 1;
+
+  // Order that is taking ownership of the hold. Required, and used for idempotency.
+  string order_id = 2;
+
+  // Fan the gateway authenticated. Required: a fan can only lock their own hold.
+  string user_id = 3;
+
+  // Propagated into logs and into every event of the saga (spec.md section 2).
+  string correlation_id = 4;
+}
+
+message LockHoldResponse {
+  string hold_id = 1;
+
+  string order_id = 2;
+
+  // Seats now owned by the order. The Order Service prices these, it does not trust
+  // the seat list sent by the client.
+  repeated string seat_ids = 3;
+
+  string event_id = 4;
+
+  // New expiry of the hold, after applying the rule below.
+  google.protobuf.Timestamp expires_at = 5;
+
+  // true when this exact (hold_id, order_id) had already been locked.
+  bool already_locked = 6;
+}
+
+// ---------------------------------------------------------------------------
+// TTL rule
+// ---------------------------------------------------------------------------
+// A hold starts with a 600 s TTL. On LockHold the Reservation Service sets:
+//
+//     expires_at = max(current_expires_at, now + 300 s)
+//
+// `max` matters. A plain "set the TTL to 300 s" would SHORTEN a fresh hold (a fan who
+// checks out immediately still has ~595 s left), which is the opposite of the intent.
+// 300 s comfortably covers the worst payment attempt allowed by spec.md section 7:
+// a 20 s gateway timeout plus retries at 2 s, 10 s and 30 s.
+//
+// docs/spec.md describes this as "TTL extended to 300 s"; the wording is being corrected
+// to match this rule.
+//
+// ---------------------------------------------------------------------------
+// Errors (gRPC status codes; no error payload in the response message)
+// ---------------------------------------------------------------------------
+//   NOT_FOUND           HOLD_NOT_FOUND     unknown hold_id
+//   FAILED_PRECONDITION HOLD_EXPIRED       the TTL ran out before checkout
+//   FAILED_PRECONDITION HOLD_LOCKED        already bound to a different order
+//   PERMISSION_DENIED   FORBIDDEN          the hold belongs to another fan
+//   INVALID_ARGUMENT    VALIDATION_ERROR   missing or malformed field
+//   UNAVAILABLE         SERVICE_UNAVAILABLE  hold-store (Redis) is unreachable
+//
+// The Order Service maps these onto the HTTP answers of POST /orders:
+// 404 HOLD_NOT_FOUND, 409 HOLD_EXPIRED, 409 HOLD_LOCKED, 503 on UNAVAILABLE.
+// The `code` strings above are the same ones used in problem+json responses, so a
+// failure keeps one name from Redis all the way to the fan's browser.
