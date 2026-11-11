@@ -13,6 +13,7 @@ const CONSUMER = 'catalog';
 
 interface SeatEventData {
   eventId: string;
+  holdId?: string;
   seatIds?: string[];
   seats?: (string | { seatId: string })[];
 }
@@ -74,20 +75,20 @@ export class AvailabilityConsumers implements OnModuleInit, OnModuleDestroy {
 
   private async onSeatsHeld(envelope: EventEnvelope<SeatEventData>): Promise<void> {
     const seatIds = seatIdsOf(envelope.data);
-    await this.catalog.markSeats(envelope.data.eventId, seatIds, 'HELD');
+    await this.catalog.markHeld(envelope.data.eventId, seatIds, envelope.data.holdId ?? '');
     this.logger.log(`${seatIds.length} seat(s) marked HELD for event ${envelope.data.eventId}`);
   }
 
   private async onSeatsReleased(envelope: EventEnvelope<SeatEventData>): Promise<void> {
     const seatIds = seatIdsOf(envelope.data);
-    await this.catalog.clearSeats(envelope.data.eventId, seatIds);
-    this.logger.log(`${seatIds.length} seat(s) back to AVAILABLE for event ${envelope.data.eventId}`);
+    await this.catalog.clearSeats(envelope.data.eventId, seatIds, envelope.data.holdId ?? '');
+    this.logger.log(`${seatIds.length} seat(s) released for event ${envelope.data.eventId}`);
   }
 
   private async onOrderConfirmed(envelope: EventEnvelope<SeatEventData>): Promise<void> {
     const seatIds = seatIdsOf(envelope.data);
     // SOLD overwrites HELD; the seat never returns to AVAILABLE from here.
-    await this.catalog.markSeats(envelope.data.eventId, seatIds, 'SOLD');
+    await this.catalog.markSold(envelope.data.eventId, seatIds);
     this.logger.log(`${seatIds.length} seat(s) marked SOLD for event ${envelope.data.eventId}`);
   }
 

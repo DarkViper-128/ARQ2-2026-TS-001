@@ -93,15 +93,68 @@ export class CatalogService {
     };
   }
 
-  /** Used by the consumers (CAT-5) to move seats in and out of the overlay. */
-  async markSeats(eventId: string, seatIds: string[], status: 'HELD' | 'SOLD'): Promise<void> {
-    if (seatIds.length === 0) return;
-    const pairs = seatIds.flatMap((seatId) => [seatId, status]);
-    await this.redis.hset(CatalogService.availabilityKey(eventId), ...pairs);
+  /** Hash seatId -> holdId of the hold that made the seat HELD. */
+  static holdersKey(eventId: string): string {
+    return `availability-holders:${eventId}`;
   }
 
-  async clearSeats(eventId: string, seatIds: string[]): Promise<void> {
+  /*
+   * The overlay is updated with small scripts instead of plain HSET/HDEL because events
+   * from different queues can arrive in any order (spec.md section 5, "Ordering"):
+   *  - SOLD is final: a late seat.held or seat.released never moves a sold seat back.
+   *  - A seat.released only clears the seat if it is still held by THAT hold, so the
+   *    sweep of an expired hold cannot erase the HELD of another fan who took the seat since.
+   *
+   * KEYS [1] availability [2] holders   ARGV [1] holdId, [2..n] seat ids
+   */
+  private static readonly MARK_HELD = `
+for i = 2, #ARGV do
+  if redis.call('HGET', KEYS[1], ARGV[i]) ~= 'SOLD' then
+    redis.call('HSET', KEYS[1], ARGV[i], 'HELD')
+    redis.call('HSET', KEYS[2], ARGV[i], ARGV[1])
+  end
+end
+return 1`;
+
+  private static readonly MARK_SOLD = `
+for i = 2, #ARGV do
+  redis.call('HSET', KEYS[1], ARGV[i], 'SOLD')
+  redis.call('HDEL', KEYS[2], ARGV[i])
+end
+return 1`;
+
+  private static readonly CLEAR_HELD = `
+for i = 2, #ARGV do
+  local holder = redis.call('HGET', KEYS[2], ARGV[i])
+  if redis.call('HGET', KEYS[1], ARGV[i]) == 'HELD' and ((not holder) or holder == ARGV[1]) then
+    redis.call('HDEL', KEYS[1], ARGV[i])
+    redis.call('HDEL', KEYS[2], ARGV[i])
+  end
+end
+return 1`;
+
+  private async overlay(script: string, eventId: string, holdId: string, seatIds: string[]): Promise<void> {
     if (seatIds.length === 0) return;
-    await this.redis.hdel(CatalogService.availabilityKey(eventId), ...seatIds);
+    await this.redis.eval(
+      script,
+      2,
+      CatalogService.availabilityKey(eventId),
+      CatalogService.holdersKey(eventId),
+      holdId,
+      ...seatIds,
+    );
+  }
+
+  /** Used by the consumers (CAT-5) to move seats in and out of the overlay. */
+  markHeld(eventId: string, seatIds: string[], holdId: string): Promise<void> {
+    return this.overlay(CatalogService.MARK_HELD, eventId, holdId, seatIds);
+  }
+
+  markSold(eventId: string, seatIds: string[]): Promise<void> {
+    return this.overlay(CatalogService.MARK_SOLD, eventId, '', seatIds);
+  }
+
+  clearSeats(eventId: string, seatIds: string[], holdId: string): Promise<void> {
+    return this.overlay(CatalogService.CLEAR_HELD, eventId, holdId, seatIds);
   }
 }
