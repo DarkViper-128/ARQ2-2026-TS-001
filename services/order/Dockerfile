@@ -31,6 +31,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/libs/shared/dist libs/shared/dist
 COPY --from=build /app/libs/nest-support/dist libs/nest-support/dist
 COPY --from=build /app/services/order/dist services/order/dist
+# LockHold contract, loaded at runtime by the gRPC client (ORD-3).
+COPY proto proto
 
 USER node
 EXPOSE 3000
