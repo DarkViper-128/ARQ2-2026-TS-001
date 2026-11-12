@@ -143,6 +143,29 @@ export class TicketsService {
     return rows.map(toView);
   }
 
+  /** Lists every ticket issued to the given fan (Keycloak `sub`). */
+  async getAll(userId: string) {
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      'SELECT * FROM tickets WHERE user_id = ? ORDER BY issued_at DESC',
+      [userId],
+    );
+    return Promise.all(rows.map((row) => this.toViewWithUrl(row)));
+  }
+
+  private async toViewWithUrl(row: RowDataPacket) {
+    const ticket = toView(row);
+    return {
+      ticketId: ticket.ticketId,
+      orderId: ticket.orderId,
+      eventId: ticket.eventId,
+      seatId: ticket.seatId,
+      category: ticket.category,
+      qrPayload: ticket.qrPayload,
+      issuedAt: ticket.issuedAt,
+      downloadUrl: await this.storage.downloadUrl(ticket.pdfObjectKey),
+    };
+  }
+
   /** TKT-4. `GET /tickets/{ticketId}`: only the fan who holds the ticket may read it. */
   async get(ticketId: string, userId: string) {
     const [rows] = await this.pool.query<RowDataPacket[]>('SELECT * FROM tickets WHERE ticket_id = ?', [ticketId]);
