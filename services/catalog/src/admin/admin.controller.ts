@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, HttpCode, Param, Patch, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { requireRole } from '@flashtix/nest-support';
 import { AdminService } from './admin.service';
@@ -14,6 +14,14 @@ export class AdminController {
     const created = await this.admin.createEvent(body);
     response.status(201).setHeader('Location', `/v1/events/${created.eventId}`);
     return created;
+  }
+
+  /** `PATCH /admin/events/{eventId}`: updates editable fields (name and ticket price). */
+  @Patch(':eventId')
+  @HttpCode(200)
+  update(@Req() request: Request, @Param('eventId') eventId: string, @Body() body: unknown) {
+    requireRole(request, 'ORGANIZER');
+    return this.admin.updateEvent(eventId, body);
   }
 
   @Post(':eventId/publish')

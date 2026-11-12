@@ -10,7 +10,8 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "@flashtix/shared": "0.1.0"
+    "@flashtix/shared": "0.1.0",
+    "prom-client": "^15.1.3"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

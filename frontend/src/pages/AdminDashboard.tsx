@@ -1,589 +1,716 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { api, useAuth } from '../lib/api';
-import { extractList } from '../lib/apiHelper';
+import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+
+const API_BASE = '/v1';
 
 interface Event {
-  eventId: string;
+  event_id: string;
   name: string;
+  description: string;
   artist: string;
-  venue: { name: string; city: string };
-  startsAt: string;
-  saleStartsAt: string;
-  status: string;
+  venue_name: string;
+  venue_city: string;
+  starts_at: string;
+  sale_starts_at: string;
+  status: 'DRAFT' | 'PUBLISHED' | 'ON_SALE' | 'SOLD_OUT' | 'CANCELLED';
+  total_seats: number;
+  price_amount: number;
+  created_at: string;
 }
 
 interface Order {
-  orderId: string;
-  userId: string;
-  eventId: string;
-  status: string;
-  total: { amount: number; currency: string };
-  seats: Array<{ seatId: string; category: string }>;
-  createdAt: string;
+  order_id: string;
+  user_id: string;
+  user_email: string;
+  event_id: string;
+  hold_id: string;
+  status: 'PENDING' | 'CONFIRMED' | 'FAILED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
+  total_amount: number;
+  failure_reason: string | null;
+  created_at: string;
 }
 
-const POLL_INTERVAL = 5000;
+interface ErrorLog {
+  operation: string;
+  message: string;
+  timestamp: string;
+}
 
-export default function AdminDashboard() {
-  const { token } = useAuth();
-  const navigate = useNavigate();
+const AdminDashboard: React.FC = () => {
+  const location = useLocation();
+  const [token, setToken] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'events' | 'my-events' | 'orders' | 'monitoring'>('events');
   const [events, setEvents] = useState<Event[]>([]);
+  const [myEvents, setMyEvents] = useState<Event[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [apiErrors, setApiErrors] = useState<Record<string, string>>({});
-
-  // Crear evento form state
+  const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
+  const [stats, setStats] = useState({
+    eventsCreated: 0,
+    eventsPublished: 0,
+    ordersConfirmed: 0,
+    refundsRequested: 0,
+  });
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
     name: '',
-    artist: '',
-    venueName: '',
-    venueCity: '',
-    startsAt: '',
-    saleStartsAt: '',
-    priceCategories: JSON.stringify([
-      { category: 'VIP', price: { amount: 45000000, currency: 'COP' } },
-    ]),
-    seats: JSON.stringify([{ seatId: 'A-01-01', category: 'VIP' }]),
+    description: '',
+    totalSeats: '',
+    price: '',
   });
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    totalSeats: '',
+    price: '',
+  });
+  const [message, setMessage] = useState({ text: '', type: 'success' as 'success' | 'error' });
+  const [loading, setLoading] = useState(false);
+
+  // Sincronizar la ruta de la URL con la tab activa (cada ruta = un dashboard)
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === '/admin/refunds') {
+      setActiveTab('orders');
+      setShowCreateForm(false);
+    } else if (path === '/admin/create') {
+      setActiveTab('events');
+      setShowCreateForm(true);
+    } else {
+      // /admin, /admin/events y cualquier otra
+      setActiveTab('events');
+      setShowCreateForm(false);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setInterval>;
+    const t = localStorage.getItem('flashtix_token');
+    if (t) setToken(t);
+  }, []);
 
-    const loadEvents = async () => {
-      try {
-        const data = await api.get('/events', token);
-        const list = extractList<Event>(data);
-        if (!cancelled) setEvents(list);
-        if (!cancelled) setLoading(false);
-        if (!cancelled) setApiErrors((prev) => ({ ...prev, events: '' }));
-      } catch (err: any) {
-        if (!cancelled && err.message === 'UNAUTHENTICATED') {
-          localStorage.removeItem('flashtix_token');
-          localStorage.removeItem('flashtix_user');
-          navigate('/login');
-        } else if (!cancelled) {
-          setApiErrors((prev) => ({ ...prev, events: err.message || 'Error cargando eventos' }));
-          setLoading(false);
-        }
-      }
-    };
+  useEffect(() => {
+    if (!token) return;
+    loadData();
+  }, [token, activeTab]);
 
-    const loadOrders = async () => {
-      try {
-        const data = await api.get('/orders', token);
-        const list = extractList<Order>(data);
-        if (!cancelled) setOrders(list);
-        if (!cancelled) setApiErrors((prev) => ({ ...prev, orders: '' }));
-      } catch (err: any) {
-        if (!cancelled && err.message === 'UNAUTHENTICATED') {
-          localStorage.removeItem('flashtix_token');
-          localStorage.removeItem('flashtix_user');
-          navigate('/login');
-        } else if (!cancelled) {
-          // Órdenes pueden no estar disponibles para organizador (401) — no es crítico
-          setApiErrors((prev) => ({ ...prev, orders: 'Órdenes no disponibles para este rol' }));
-        }
-      }
-    };
-
-    const refresh = () => {
-      loadEvents();
-      loadOrders();
-    };
-
-    refresh();
-    timer = setInterval(refresh, POLL_INTERVAL);
-
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
-  }, [token, navigate]);
-
-  const handlePublish = async (eventId: string) => {
+  const loadData = async () => {
+    setLoading(true);
     try {
-      await api.post(`/admin/events/${eventId}/publish`, {}, token);
-      setSuccess('Evento publicado correctamente');
-      setApiErrors((prev) => ({ ...prev, publish: '' }));
-      const data = await api.get('/events', token);
-      setEvents(extractList<Event>(data));
+      const [eventsData, ordersData] = await Promise.all([
+        (await apiFetch('/events')) as Event[],
+        (await apiFetch('/orders')) as Order[],
+      ]);
+      setEvents(eventsData);
+      setMyEvents(eventsData.filter((e) => e.status !== 'CANCELLED'));
+      setOrders(ordersData);
+
+      setStats({
+        eventsCreated: eventsData.length,
+        eventsPublished: eventsData.filter((e) => e.status === 'PUBLISHED' || e.status === 'ON_SALE').length,
+        ordersConfirmed: ordersData.filter((o) => o.status === 'CONFIRMED').length,
+        refundsRequested: ordersData.filter((o) => o.status === 'REFUND_PENDING' || o.status === 'REFUNDED').length,
+      });
+
+      const failed = ordersData.filter((o) => o.status === 'FAILED' || o.status === 'CANCELLED');
+      setErrorLogs(
+        failed
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 10)
+          .map((o) => ({
+            operation: 'Checkout',
+            message: o.failure_reason || 'Orden cancelada',
+            timestamp: o.created_at,
+          }))
+      );
     } catch (err: any) {
-      setApiErrors((prev) => ({ ...prev, publish: err.message || 'Error al publicar' }));
-      setSuccess('');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteEvent = async (eventId: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este evento?')) return;
-    try {
-      await api.delete(`/admin/events/${eventId}`, token);
-      setSuccess('Evento eliminado correctamente');
-      setApiErrors((prev) => ({ ...prev, delete: '' }));
-      const data = await api.get('/events', token);
-      setEvents(extractList<Event>(data));
-    } catch (err: any) {
-      setApiErrors((prev) => ({ ...prev, delete: err.message || 'Error al eliminar' }));
-      setSuccess('');
+  const apiFetch = async (path: string, options: RequestInit = {}): Promise<any> => {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Error ${res.status}`);
     }
+    return res.json();
   };
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
-    setApiErrors((prev) => ({ ...prev, create: '' }));
-
     try {
-      const body = {
-        name: createForm.name,
-        artist: createForm.artist,
-        venue: { name: createForm.venueName, city: createForm.venueCity },
-        startsAt: createForm.startsAt,
-        saleStartsAt: createForm.saleStartsAt,
-        priceCategories: JSON.parse(createForm.priceCategories),
-        seats: JSON.parse(createForm.seats),
-      };
-
-      await api.post('/admin/events', body, token);
-      setSuccess('Evento creado correctamente');
-      setApiErrors((prev) => ({ ...prev, create: '' }));
-
-      setCreateForm({
-        name: '',
-        artist: '',
-        venueName: '',
-        venueCity: '',
-        startsAt: '',
-        saleStartsAt: '',
-        priceCategories: JSON.stringify([
-          { category: 'VIP', price: { amount: 45000000, currency: 'COP' } },
-        ]),
-        seats: JSON.stringify([{ seatId: 'A-01-01', category: 'VIP' }]),
+      const seats = Array.from({ length: Math.max(parseInt(createForm.totalSeats) || 10, 1) }, (_, i) => ({
+        seatId: `A-${Math.floor(i / 10) + 1}-${(i % 10) + 1}`,
+        category: 'General',
+      }));
+      await apiFetch('/admin/events', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: createForm.name,
+          artist: createForm.name || createForm.description || 'Evento',
+          venue_name: 'Estadio Local',
+          venue_city: 'Bogota',
+          starts_at: new Date(Date.now() + 86400000 * 30).toISOString(),
+          sale_starts_at: new Date(Date.now() + 86400000).toISOString(),
+          status: 'DRAFT',
+          priceCategories: [{ category: 'General', price: { amount: parseInt(createForm.price) || 100, currency: 'COP' } }],
+          seats,
+        }),
       });
-
-      const data = await api.get('/events', token);
-      setEvents(extractList<Event>(data));
-      setLoading(false);
+      setMessage({ text: 'Evento creado en estado DRAFT', type: 'success' });
+      setCreating(false);
+      setCreateForm({ name: '', description: '', totalSeats: '', price: '' });
+      setShowCreateForm(false);
+      loadData();
     } catch (err: any) {
-      setApiErrors((prev) => ({ ...prev, create: err.message || 'Error al crear evento' }));
+      setMessage({ text: err.message || 'Error creando evento', type: 'error' });
+    } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return <div style={styles.loader}>Cargando panel de organizador...</div>;
+  const handlePublish = async (eventId: string) => {
+    setLoading(true);
+    try {
+      await apiFetch(`/admin/events/${eventId}/publish`, { method: 'POST' });
+      setMessage({ text: 'Evento publicado', type: 'success' });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error publicando', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const draftEvents = events.filter((e) => e.status === 'DRAFT');
-  const publishedEvents = events.filter((e) => e.status === 'PUBLISHED');
-  const confirmedOrders = orders.filter((o) => o.status === 'CONFIRMED');
+  const handleUpdateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setLoading(true);
+    try {
+      const seatsCount = Math.max(parseInt(editForm.totalSeats) || 1, 1);
+      await apiFetch(`/admin/events/${editing}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editForm.name,
+          description: editForm.description,
+          priceCategories: [{ category: 'General', price: { amount: parseInt(editForm.price) || 100, currency: 'COP' } }],
+          seats: Array.from({ length: seatsCount }, (_, i) => ({
+            seatId: `A-${Math.floor(i / 10) + 1}-${(i % 10) + 1}`,
+            category: 'General',
+          })),
+        }),
+      });
+      setEditing(null);
+      setMessage({ text: 'Evento actualizado', type: 'success' });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error actualizando evento', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefund = async (orderId: string) => {
+    if (!confirm('¿Seguro que deseas solicitar el reembolso de esta orden?')) return;
+    setLoading(true);
+    try {
+      await apiFetch(`/admin/orders/${orderId}/refund`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: 'EVENT_CANCELLED' }),
+      });
+      setMessage({ text: 'Reembolso solicitado (transaccional)', type: 'success' });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error solicitando reembolso', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const statusColor = (status: string) => {
+    switch (status) {
+      case 'PUBLISHED': return 'bg-green-100 text-green-800';
+      case 'ON_SALE': return 'bg-blue-100 text-blue-800';
+      case 'DRAFT': return 'bg-yellow-100 text-yellow-800';
+      case 'CANCELLED': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const orderStatusColor = (status: string) => {
+    switch (status) {
+      case 'CONFIRMED': return 'bg-green-100 text-green-800';
+      case 'PENDING': return 'bg-yellow-100 text-yellow-800';
+      case 'FAILED': return 'bg-red-100 text-red-800';
+      case 'CANCELLED': return 'bg-gray-100 text-gray-800';
+      case 'REFUND_PENDING': return 'bg-orange-100 text-orange-800';
+      case 'REFUNDED': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
 
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <div style={styles.welcome}>
-          <h1 style={styles.title}>Panel Organizador</h1>
-          <p style={styles.subtitle}>
-            Gestiona tus eventos y visualiza la actividad de la plataforma
-          </p>
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6 max-w-[1400px] mx-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Panel Organizador</h1>
+          <p className="text-gray-600">Gestiona tus eventos, ordenes y monitorea la plataforma</p>
         </div>
-        <div style={styles.roleChip}>
-          <span style={styles.roleText}>Rol: ORGANIZADOR</span>
-        </div>
-      </header>
-
-      {success && <div style={styles.successBanner}>{success}</div>}
-      {error && <div style={styles.errorBanner}>{error}</div>}
-      {apiErrors.create && <div style={styles.errorBanner}>Crear evento: {apiErrors.create}</div>}
-      {apiErrors.publish && <div style={styles.errorBanner}>Publicar: {apiErrors.publish}</div>}
-      {apiErrors.delete && <div style={styles.errorBanner}>Eliminar: {apiErrors.delete}</div>}
-      {apiErrors.events && <div style={styles.errorBanner}>{apiErrors.events}</div>}
-
-      {/* Estadísticas */}
-      <div style={styles.statsGrid}>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>📊</div>
-          <div style={styles.statValue}>{events.length}</div>
-          <div style={styles.statLabel}>Total eventos</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>⏳</div>
-          <div style={styles.statValue}>{draftEvents.length}</div>
-          <div style={styles.statLabel}>Borradores</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>🟢</div>
-          <div style={styles.statValue}>{publishedEvents.length}</div>
-          <div style={styles.statLabel}>Publicados</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>🎫</div>
-          <div style={styles.statValue}>{confirmedOrders.length}</div>
-          <div style={styles.statLabel}>Órdenes confirmadas</div>
-        </div>
+        <button
+          onClick={() => {
+            localStorage.removeItem('flashtix_token');
+            window.location.href = '/';
+          }}
+          className="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition"
+        >
+          Cerrar sesion
+        </button>
       </div>
 
-      <div style={styles.twoColumns}>
-        {/* Columna izquierda: Crear evento */}
-        <section style={styles.card}>
-          <h2 style={styles.sectionTitle}>➕ Crear Evento</h2>
-          <p style={styles.hint}>
-            Completa los datos del evento. Los campos de categorías y asientos usan formato JSON.
-          </p>
-          <form onSubmit={handleCreateEvent} style={styles.form}>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Nombre del evento</label>
-              <input
-                type="text"
-                value={createForm.name}
-                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                placeholder="Ej: World Tour 2026"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Artista</label>
-              <input
-                type="text"
-                value={createForm.artist}
-                onChange={(e) => setCreateForm({ ...createForm, artist: e.target.value })}
-                placeholder="Ej: The Headliners"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Venue - Nombre</label>
-              <input
-                type="text"
-                value={createForm.venueName}
-                onChange={(e) => setCreateForm({ ...createForm, venueName: e.target.value })}
-                placeholder="Ej: Estadio El Campín"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Venue - Ciudad</label>
-              <input
-                type="text"
-                value={createForm.venueCity}
-                onChange={(e) => setCreateForm({ ...createForm, venueCity: e.target.value })}
-                placeholder="Ej: Bogotá"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Fecha y hora del evento (ISO)</label>
-              <input
-                type="text"
-                value={createForm.startsAt}
-                onChange={(e) => setCreateForm({ ...createForm, startsAt: e.target.value })}
-                placeholder="2026-12-20T23:00:00.000Z"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Fecha de inicio de venta (ISO)</label>
-              <input
-                type="text"
-                value={createForm.saleStartsAt}
-                onChange={(e) => setCreateForm({ ...createForm, saleStartsAt: e.target.value })}
-                placeholder="2026-11-01T15:00:00.000Z"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Categorías de precio (JSON)</label>
-              <textarea
-                value={createForm.priceCategories}
-                onChange={(e) => setCreateForm({ ...createForm, priceCategories: e.target.value })}
-                placeholder='[{"category":"VIP","price":{"amount":45000000,"currency":"COP"}}]'
-                style={styles.textarea}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Asientos (JSON)</label>
-              <textarea
-                value={createForm.seats}
-                onChange={(e) => setCreateForm({ ...createForm, seats: e.target.value })}
-                placeholder='[{"seatId":"A-01-01","category":"VIP"}]'
-                style={styles.textarea}
-                required
-              />
-            </div>
-            <button type="submit" style={styles.createBtn}>Crear Evento</button>
-          </form>
-        </section>
+      {message.text && (
+        <div className={`mb-4 p-4 rounded-lg border ${
+          message.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          {message.text}
+        </div>
+      )}
 
-        {/* Columna derecha: Eventos */}
-        <section style={styles.card}>
-          <h2 style={styles.sectionTitle}>🎪 Mis Eventos</h2>
-          {events.length === 0 ? (
-            <p style={styles.empty}>No tienes eventos creados.</p>
-          ) : (
-            <div style={styles.eventList}>
-              {events.map((event) => (
-                <div key={event.eventId} style={styles.eventRow}>
-                  <div style={styles.eventInfo}>
-                    <strong style={styles.eventName}>{event.name}</strong>
-                    <p style={styles.eventDetail}>
-                      {event.venue.name} · {event.venue.city}
-                    </p>
-                    <p style={styles.eventDetail}>
-                      {new Date(event.startsAt).toLocaleDateString('es-CO')}
-                    </p>
-                  </div>
-                  <div style={styles.eventActions}>
-                    <span style={getStatusBadgeStyle(event.status)}>{event.status}</span>
-                    {event.status === 'DRAFT' && (
-                      <button
-                        onClick={() => handlePublish(event.eventId)}
-                        style={styles.publishBtn}
-                      >
-                        Publicar
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleDeleteEvent(event.eventId)}
-                      style={styles.deleteBtn}
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Órdenes (si están disponibles) */}
-        <section style={{ ...styles.card, marginTop: 24 }}>
-          <h2 style={styles.sectionTitle}>💸 Órdenes Recientes</h2>
-          {apiErrors.orders && (
-            <p style={styles.emptyHint}>{apiErrors.orders}</p>
-          )}
-          {confirmedOrders.length === 0 && !apiErrors.orders ? (
-            <p style={styles.empty}>No hay órdenes confirmadas todavía.</p>
-          ) : (
-            <div style={styles.orderList}>
-              {confirmedOrders.map((order) => (
-                <div key={order.orderId} style={styles.orderRow}>
-                  <div style={styles.orderInfo}>
-                    <strong style={styles.orderIdText}>#{order.orderId.slice(0, 8)}</strong>
-                    <p style={styles.orderDetail}>
-                      Evento: {order.eventId.slice(0, 8)}...
-                    </p>
-                    <p style={styles.orderDetail}>
-                      Asientos: {order.seats.map((s) => s.seatId).join(', ')}
-                    </p>
-                    <p style={styles.orderDetail}>
-                      {order.total.amount.toLocaleString('es-CO', {
-                        style: 'currency',
-                        currency: 'COP',
-                      })}
-                    </p>
-                  </div>
-                  <div style={styles.orderActions}>
-                    <span style={getStatusBadgeStyle(order.status)}>{order.status}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+      <div className="flex border-b mb-6">
+        <button
+          onClick={() => {
+            setActiveTab('events');
+            setShowCreateForm(false);
+          }}
+          className={`px-6 py-4 border-b-2 font-medium transition ${
+            activeTab === 'events' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Todos los Eventos
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('my-events');
+            setShowCreateForm(false);
+          }}
+          className={`px-6 py-4 border-b-2 font-medium transition ${
+            activeTab === 'my-events' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Mis Eventos
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('orders');
+            setShowCreateForm(false);
+          }}
+          className={`px-6 py-4 border-b-2 font-medium transition ${
+            activeTab === 'orders' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Ordenes
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('monitoring');
+            setShowCreateForm(false);
+          }}
+          className={`px-6 py-4 border-b-2 font-medium transition ${
+            activeTab === 'monitoring' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Monitoreo
+        </button>
       </div>
+
+      {activeTab === 'events' && (
+        <div>
+          {/* Boton para mostrar/ocultar el formulario de crear evento */}
+          <button
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="mb-4 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition flex items-center gap-2"
+          >
+            {showCreateForm ? 'Ocultar formulario' : '+'} Crear Evento
+          </button>
+
+          {showCreateForm && (
+            <div className="bg-white p-6 rounded-xl shadow mb-6 border border-gray-200">
+              <h2 className="text-xl font-semibold mb-4">Crear Evento</h2>
+              <form onSubmit={handleCreateEvent} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del evento</label>
+                  <input
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Ej. Concierto Rock 2026"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Descripcion</label>
+                  <input
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Descripcion del evento"
+                    value={createForm.description}
+                    onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Boletas disponibles</label>
+                  <input
+                    type="number"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Ej. 200"
+                    value={createForm.totalSeats}
+                    onChange={(e) => setCreateForm({ ...createForm, totalSeats: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Costo por boleta (COP)</label>
+                  <input
+                    type="number"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Ej. 45000"
+                    value={createForm.price}
+                    onChange={(e) => setCreateForm({ ...createForm, price: e.target.value })}
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={creating || loading}
+                  className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white rounded-lg font-semibold text-lg hover:bg-blue-700 disabled:opacity-50 transition"
+                >
+                  {creating ? 'Creando...' : 'Crear Evento'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Eventos del Sistema</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Nombre</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Descripcion</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Boletas</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Precio</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Estado</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {events.map((event) => (
+                    <tr key={event.event_id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 font-medium">{event.name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">{event.description || '—'}</td>
+                      <td className="px-6 py-4">{event.total_seats}</td>
+                      <td className="px-6 py-4">${event.price_amount.toLocaleString()} COP</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${statusColor(event.status)}`}>
+                          {event.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {event.status === 'DRAFT' && (
+                          <button
+                            onClick={() => handlePublish(event.event_id)}
+                            disabled={loading}
+                            className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50"
+                          >
+                            Publicar
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {events.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                        No hay eventos creados aun.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'my-events' && (
+        <div>
+          <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Mis Eventos</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Nombre</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Descripcion</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Boletas</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Precio</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Estado</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {myEvents.map((event) => (
+                    <tr key={event.event_id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 font-medium">{event.name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">{event.description || '—'}</td>
+                      <td className="px-6 py-4">{event.total_seats}</td>
+                      <td className="px-6 py-4">${event.price_amount.toLocaleString()} COP</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${statusColor(event.status)}`}>
+                          {event.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {editing === event.event_id ? (
+                          <form onSubmit={handleUpdateEvent} className="flex flex-col sm:flex-row gap-2 items-end">
+                            <input
+                              className="px-3 py-2 border border-gray-300 rounded text-sm w-40 sm:w-48"
+                              value={editForm.name}
+                              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                              required
+                            />
+                            <input
+                              className="px-3 py-2 border border-gray-300 rounded text-sm w-40 sm:w-48"
+                              value={editForm.description}
+                              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                            />
+                            <input
+                              type="number"
+                              className="px-3 py-2 border border-gray-300 rounded text-sm w-24 sm:w-32"
+                              value={editForm.totalSeats}
+                              onChange={(e) => setEditForm({ ...editForm, totalSeats: e.target.value })}
+                              required
+                            />
+                            <input
+                              type="number"
+                              className="px-3 py-2 border border-gray-300 rounded text-sm w-24 sm:w-32"
+                              value={editForm.price}
+                              onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                              required
+                            />
+                            <button
+                              type="submit"
+                              disabled={loading}
+                              className="px-5 py-2.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditing(null)}
+                              className="px-5 py-2.5 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300"
+                            >
+                              Cancelar
+                            </button>
+                          </form>
+                        ) : (
+                          <>
+                            {event.status === 'DRAFT' && (
+                              <button
+                                onClick={() => {
+                                  setEditing(event.event_id);
+                                  setEditForm({
+                                    name: event.name,
+                                    description: event.description,
+                                    totalSeats: String(event.total_seats),
+                                    price: String(event.price_amount),
+                                  });
+                                }}
+                                className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                              >
+                                Editar
+                              </button>
+                            )}
+                            {event.status === 'DRAFT' && (
+                              <button
+                                onClick={() => handlePublish(event.event_id)}
+                                disabled={loading}
+                                className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 ml-2"
+                              >
+                                Publicar
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {myEvents.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                        No tienes eventos creados.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'orders' && (
+        <div>
+          <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Ordenes del Sistema</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Orden ID</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Usuario</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Monto</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Estado</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {orders.map((order) => (
+                    <tr key={order.order_id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 font-mono text-sm">{order.order_id}</td>
+                      <td className="px-6 py-4">{order.user_email}</td>
+                      <td className="px-6 py-4">${order.total_amount.toLocaleString()} COP</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${orderStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {order.status === 'CONFIRMED' && (
+                          <button
+                            onClick={() => handleRefund(order.order_id)}
+                            disabled={loading}
+                            className="px-5 py-2.5 bg-orange-600 text-white text-sm rounded hover:bg-orange-700 disabled:opacity-50"
+                          >
+                            Reembolsar
+                          </button>
+                        )}
+                        {order.status !== 'CONFIRMED' && (
+                          <span className="text-xs text-gray-400">No reembolsable</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {orders.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                        No hay ordenes registradas.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'monitoring' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Grafico 1: Errores en la compra */}
+          <div className="bg-white rounded-xl shadow border border-gray-200">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900">Errores en la Compra</h2>
+              <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-1 rounded">{errorLogs.length}</span>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {errorLogs.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 text-sm">Sin errores de compra recientes</div>
+              ) : (
+                errorLogs.map((err, i) => (
+                  <div key={i} className="p-6">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{err.operation}</p>
+                        <p className="text-sm text-gray-600">{err.message}</p>
+                      </div>
+                      <span className="text-xs text-gray-400">{new Date(err.timestamp).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Grafico 2: Compras de boletos exitosas */}
+          <div className="bg-white rounded-xl shadow border border-gray-200 p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">Compras de Boletos Exitosas</h2>
+              <span className="text-xs font-medium bg-green-100 text-green-700 px-2 py-1 rounded">{stats.ordersConfirmed}</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6 mb-6">
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="text-3xl font-bold text-green-600">{stats.ordersConfirmed}</div>
+                <div className="text-sm text-gray-500 mt-1">Ordenes confirmadas</div>
+              </div>
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="text-3xl font-bold text-blue-600">{stats.eventsPublished}</div>
+                <div className="text-sm text-gray-500 mt-1">Eventos publicados</div>
+              </div>
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="text-3xl font-bold text-indigo-600">{stats.eventsCreated}</div>
+                <div className="text-sm text-gray-500 mt-1">Eventos creados</div>
+              </div>
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="text-3xl font-bold text-orange-600">{stats.refundsRequested}</div>
+                <div className="text-sm text-gray-500 mt-1">Reembolsos solicitados</div>
+              </div>
+            </div>
+
+            <div className="mt-6 h-64">
+              <svg className="w-full h-full" viewBox="0 0 700 350">
+                <defs>
+                  <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop stopColor="rgb(99,102,241)" stopOpacity="1" offset="0%" />
+                    <stop stopColor="rgb(79,70,229)" stopOpacity="1" offset="100%" />
+                  </linearGradient>
+                </defs>
+                <rect x="60" y="120" width="140" height="160" fill="url(#grad1)" rx="10" />
+                <rect x="230" y="60" width="140" height="220" fill="url(#grad1)" rx="10" />
+                <rect x="400" y="170" width="140" height="100" fill="url(#grad1)" rx="10" />
+                <rect x="570" y="90" width="140" height="140" fill="url(#grad1)" rx="10" />
+                <text x="130" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Confirmadas</text>
+                <text x="300" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Publicadas</text>
+                <text x="470" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Creadas</text>
+                <text x="640" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Reembolsos</text>
+                <text x="130" y="105" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.ordersConfirmed}</text>
+                <text x="300" y="45" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.eventsPublished}</text>
+                <text x="470" y="160" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.eventsCreated}</text>
+                <text x="640" y="75" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.refundsRequested}</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
-
-function getStatusBadgeStyle(status: string): React.CSSProperties {
-  const colors: Record<string, string> = {
-    DRAFT: '#fbbf24',
-    PUBLISHED: '#059669',
-    ON_SALE: '#2563eb',
-    SOLD_OUT: '#9ca3af',
-    CANCELLED: '#dc2626',
-  };
-  return {
-    padding: '4px 10px',
-    background: colors[status] || '#9ca3af',
-    color: '#ffffff',
-    borderRadius: 20,
-    fontSize: 11,
-    fontWeight: 600,
-    textTransform: 'uppercase',
-  };
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 0, fontFamily: 'system-ui, sans-serif', minHeight: '100vh' },
-  loader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '60vh',
-    fontSize: 18,
-    color: '#6b7280',
-  },
-  error: {
-    padding: 24,
-    background: '#fef2f2',
-    color: '#dc2626',
-    borderRadius: 8,
-    margin: 24,
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 32,
-    paddingRight: 20,
-  },
-  welcome: {},
-  title: { margin: '0 0 4px 0', fontSize: 28, color: '#111827' },
-  subtitle: { margin: 0, color: '#6b7280', fontSize: 14 },
-  roleChip: {
-    padding: '8px 16px',
-    background: '#dbeafe',
-    color: '#1e40af',
-    borderRadius: 20,
-    fontSize: 13,
-    fontWeight: 600,
-  },
-  successBanner: {
-    marginBottom: 16,
-    padding: 12,
-    background: '#dcfce7',
-    color: '#166534',
-    borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 500,
-  },
-  errorBanner: {
-    marginBottom: 16,
-    padding: 12,
-    background: '#fef2f2',
-    color: '#dc2626',
-    borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 500,
-  },
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-    gap: 16,
-    marginBottom: 24,
-  },
-  statCard: {
-    padding: 20,
-    background: '#ffffff',
-    borderRadius: 12,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 16,
-  },
-  statIcon: { fontSize: 32 },
-  statValue: { fontSize: 28, fontWeight: 700, color: '#111827', margin: '0 0 4px 0' },
-  statLabel: { margin: 0, fontSize: 13, color: '#6b7280' },
-  twoColumns: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 2fr',
-    gap: 24,
-  },
-  card: {
-    background: '#ffffff',
-    borderRadius: 12,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    padding: 24,
-    marginBottom: 24,
-  },
-  sectionTitle: { margin: '0 0 12px 0', fontSize: 18, color: '#111827' },
-  hint: { margin: '0 0 16px 0', fontSize: 13, color: '#6b7280' },
-  empty: { color: '#6b7280', fontSize: 14, margin: 8 },
-  emptyHint: { color: '#dc2626', fontSize: 14, margin: 8 },
-  form: { display: 'flex', flexDirection: 'column', gap: 12 },
-  inputGroup: { display: 'flex', flexDirection: 'column', gap: 6 },
-  label: { fontSize: 13, fontWeight: 600, color: '#374151' },
-  input: {
-    padding: 10,
-    border: '1px solid #d1d5db',
-    borderRadius: 6,
-    fontSize: 14,
-  },
-  textarea: {
-    padding: 10,
-    border: '1px solid #d1d5db',
-    borderRadius: 6,
-    fontSize: 13,
-    fontFamily: 'monospace',
-    minHeight: 80,
-  },
-  createBtn: {
-    marginTop: 8,
-    padding: 12,
-    background: '#059669',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  eventList: { display: 'flex', flexDirection: 'column', gap: 12 },
-  orderList: { display: 'flex', flexDirection: 'column', gap: 12 },
-  eventRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    border: '1px solid #e5e7eb',
-    borderRadius: 8,
-    background: '#f9fafb',
-  },
-  orderRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    border: '1px solid #e5e7eb',
-    borderRadius: 8,
-    background: '#f9fafb',
-  },
-  eventInfo: { flex: 1 },
-  orderInfo: { flex: 1 },
-  eventName: { display: 'block', margin: '0 0 4px 0', fontSize: 15, color: '#111827' },
-  orderIdText: { display: 'block', margin: '0 0 4px 0', fontSize: 15, color: '#111827' },
-  eventDetail: { margin: 0, fontSize: 13, color: '#6b7280' },
-  orderDetail: { margin: 0, fontSize: 13, color: '#6b7280' },
-  eventActions: { display: 'flex', alignItems: 'center', gap: 8 },
-  orderActions: { display: 'flex', alignItems: 'center', gap: 8 },
-  publishBtn: {
-    padding: '6px 14px',
-    background: '#059669',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  deleteBtn: {
-    padding: '6px 14px',
-    background: '#dc2626',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
 };
+
+export default AdminDashboard;

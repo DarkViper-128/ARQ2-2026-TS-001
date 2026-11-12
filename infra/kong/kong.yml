@@ -117,6 +117,7 @@ routes:
   - name: orders
     service: order
     paths:
+      - ~/v1/orders$
       - /v1/orders
     strip_path: false
     plugins:

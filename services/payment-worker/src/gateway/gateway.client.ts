@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CORRELATION_ID_HEADER, getCorrelationId } from '@flashtix/shared';
+import { CORRELATION_ID_HEADER, getCorrelationId, circuitBreakerStateGauge, paymentGatewayDurationSeconds } from '@flashtix/shared';
 import { CircuitBreaker } from './circuit-breaker';
 
 export interface GatewayCharge {
@@ -17,6 +17,10 @@ export type CallResult<T> =
  * PAY-2. HTTP client of the legacy payment gateway (tools/payment-gateway-mock locally).
  * Every call has its own 20 s timeout and goes through the circuit breaker (PAY-4).
  * Retrying is the caller's job, so one place owns the 2 s / 10 s / 30 s ladder.
+ *
+ * Emits Prometheus metrics:
+ *   - circuit_breaker_state (gauge): 0=closed, 1=open, 2=half-open
+ *   - payment_gateway_duration_seconds (histogram): duration of each gateway call
  */
 @Injectable()
 export class GatewayClient {
@@ -31,8 +35,17 @@ export class GatewayClient {
       openMs: Number(process.env.BREAKER_OPEN_MS ?? 30_000),
       minimumCalls: Number(process.env.BREAKER_MINIMUM_CALLS ?? 5),
     },
-    (state) => this.logger.warn(`circuit breaker is now ${state}`),
+    (state) => {
+      this.logger.warn(`circuit breaker is now ${state}`);
+      const stateNumber = { CLOSED: 0, OPEN: 1, HALF_OPEN: 2 }[state];
+      circuitBreakerStateGauge.set({ service: 'payment-worker' }, stateNumber);
+    },
   );
+
+  constructor() {
+    // Initialize gauge to the starting state (CLOSED = 0)
+    circuitBreakerStateGauge.set({ service: 'payment-worker' }, 0);
+  }
 
   charge(orderId: string, amount: { amount: number; currency: string }, paymentMethodToken: string) {
     return this.call<GatewayCharge>('POST', '/payments', { orderId, amount, paymentMethodToken });
@@ -47,6 +60,7 @@ export class GatewayClient {
       return { kind: 'retryable', failure: 'CIRCUIT_OPEN', detail: 'circuit breaker is open' };
     }
 
+    const start = Date.now();
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {
         method,
@@ -55,13 +69,17 @@ export class GatewayClient {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
 
+      const duration = (Date.now() - start) / 1000;
+
       if (response.status === 402) {
         // A decline is a valid answer from a healthy gateway, not a failure of the gateway.
         this.breaker.record(true);
+        paymentGatewayDurationSeconds.observe({ result: 'declined' }, duration);
         return { kind: 'declined' };
       }
       if (response.status >= 500) {
         this.breaker.record(false);
+        paymentGatewayDurationSeconds.observe({ result: 'error' }, duration);
         return { kind: 'retryable', failure: 'ERROR', detail: `gateway answered ${response.status}` };
       }
       if (!response.ok) {
@@ -70,15 +88,19 @@ export class GatewayClient {
       }
 
       this.breaker.record(true);
+      paymentGatewayDurationSeconds.observe({ result: 'ok' }, duration);
       return { kind: 'ok', value: (await response.json()) as T };
     } catch (error) {
+      const duration = (Date.now() - start) / 1000;
       const name = (error as Error).name;
       if (name === 'TimeoutError' || name === 'AbortError') {
         this.breaker.record(false);
+        paymentGatewayDurationSeconds.observe({ result: 'timeout' }, duration);
         return { kind: 'retryable', failure: 'TIMEOUT', detail: `no answer in ${this.timeoutMs} ms` };
       }
       if ((error as Error).message?.startsWith('gateway rejected')) throw error;
       this.breaker.record(false);
+      paymentGatewayDurationSeconds.observe({ result: 'error' }, duration);
       return { kind: 'retryable', failure: 'ERROR', detail: String(error) };
     }
   }

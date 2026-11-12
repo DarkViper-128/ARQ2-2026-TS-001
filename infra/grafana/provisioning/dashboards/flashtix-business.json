@@ -29,10 +29,10 @@
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
       "pluginVersion": "10.2.2",
       "targets": [
-        {"expr": "increase(orders_created_total[1h])", "legendFormat": "Orders Created (1h)", "refId": "A"},
-        {"expr": "increase(orders_confirmed_total[1h])", "legendFormat": "Orders Confirmed (1h)", "refId": "B"},
-        {"expr": "increase(orders_failed_total[1h])", "legendFormat": "Orders Failed (1h)", "refId": "C"},
-        {"expr": "increase(orders_cancelled_total[1h])", "legendFormat": "Orders Cancelled (1h)", "refId": "D"}
+        {"expr": "increase(orders_total{state=\"CONFIRMED\"}[1h])", "legendFormat": "Orders Confirmed (1h)", "refId": "A"},
+        {"expr": "increase(orders_total{state=\"FAILED\"}[1h])", "legendFormat": "Orders Failed (1h)", "refId": "B"},
+        {"expr": "increase(orders_total{state=\"CANCELLED\"}[1h])", "legendFormat": "Orders Cancelled (1h)", "refId": "C"},
+        {"expr": "increase(orders_total{state=\"PENDING\"}[1h])", "legendFormat": "Orders Pending (1h)", "refId": "D"}
       ],
       "title": "Order Volume (Last Hour)",
       "type": "stat"
@@ -48,9 +48,9 @@
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
       "pluginVersion": "10.2.2",
       "targets": [
-        {"expr": "increase(holds_created_total[1h])", "legendFormat": "Holds Created (1h)", "refId": "A"},
-        {"expr": "increase(holds_expired_total[1h])", "legendFormat": "Holds Expired (1h)", "refId": "B"},
-        {"expr": "increase(holds_consumed_total[1h])", "legendFormat": "Holds Consumed (1h)", "refId": "C"}
+        {"expr": "increase(holds_total{state=\"CREATED\"}[1h])", "legendFormat": "Holds Created (1h)", "refId": "A"},
+        {"expr": "increase(holds_total{state=\"EXPIRED\"}[1h])", "legendFormat": "Holds Expired (1h)", "refId": "B"},
+        {"expr": "increase(holds_total{state=\"CONSUMED\"}[1h])", "legendFormat": "Holds Consumed (1h)", "refId": "C"}
       ],
       "title": "Hold Volume (Last Hour)",
       "type": "stat"
@@ -66,9 +66,9 @@
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
       "pluginVersion": "10.2.2",
       "targets": [
-        {"expr": "increase(payments_succeeded_total[1h])", "legendFormat": "Payments Succeeded (1h)", "refId": "A"},
-        {"expr": "increase(payments_failed_total[1h])", "legendFormat": "Payments Failed (1h)", "refId": "B"},
-        {"expr": "increase(refunds_completed_total[1h])", "legendFormat": "Refunds Completed (1h)", "refId": "C"}
+        {"expr": "increase(payments_total{outcome=\"succeeded\"}[1h])", "legendFormat": "Payments Succeeded (1h)", "refId": "A"},
+        {"expr": "increase(payments_total{outcome=\"failed\"}[1h])", "legendFormat": "Payments Failed (1h)", "refId": "B"},
+        {"expr": "increase(refunds_total{reason=\"SEAT_CONFLICT\"}[1h])", "legendFormat": "Refunds Completed (1h)", "refId": "C"}
       ],
       "title": "Payment Volume (Last Hour)",
       "type": "stat"
@@ -101,10 +101,10 @@
       "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
       "pluginVersion": "10.2.2",
       "targets": [
-        {"expr": "increase(orders_created_total[5m])", "legendFormat": "Created", "refId": "A"},
-        {"expr": "increase(orders_confirmed_total[5m])", "legendFormat": "Confirmed", "refId": "B"},
-        {"expr": "increase(orders_failed_total[5m])", "legendFormat": "Failed", "refId": "C"},
-        {"expr": "increase(orders_cancelled_total[5m])", "legendFormat": "Cancelled", "refId": "D"}
+        {"expr": "increase(orders_total{state=\"CONFIRMED\"}[5m])", "legendFormat": "Confirmed", "refId": "A"},
+        {"expr": "increase(orders_total{state=\"FAILED\"}[5m])", "legendFormat": "Failed", "refId": "B"},
+        {"expr": "increase(orders_total{state=\"CANCELLED\"}[5m])", "legendFormat": "Cancelled", "refId": "C"},
+        {"expr": "increase(orders_total{state=\"PENDING\"}[5m])", "legendFormat": "Pending", "refId": "D"}
       ],
       "title": "Order State Transitions (5m rate)",
       "type": "timeseries"
@@ -120,10 +120,10 @@
       "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
       "pluginVersion": "10.2.2",
       "targets": [
-        {"expr": "increase(payments_succeeded_total[5m])", "legendFormat": "Succeeded", "refId": "A"},
-        {"expr": "increase(payments_failed_total{reason=\"DECLINED\"}[5m])", "legendFormat": "Declined", "refId": "B"},
-        {"expr": "increase(payments_failed_total{reason=\"GATEWAY_TIMEOUT\"}[5m])", "legendFormat": "Gateway Timeout", "refId": "C"},
-        {"expr": "increase(payments_failed_total{reason=\"GATEWAY_UNAVAILABLE\"}[5m])", "legendFormat": "Gateway Unavailable", "refId": "D"}
+        {"expr": "increase(payments_total{outcome=\"succeeded\"}[5m])", "legendFormat": "Succeeded", "refId": "A"},
+        {"expr": "increase(payments_total{outcome=\"failed\",reason=\"DECLINED\"}[5m])", "legendFormat": "Declined", "refId": "B"},
+        {"expr": "increase(payments_total{outcome=\"failed\",reason=\"GATEWAY_TIMEOUT\"}[5m])", "legendFormat": "Gateway Timeout", "refId": "C"},
+        {"expr": "increase(payments_total{outcome=\"failed\",reason=\"GATEWAY_UNAVAILABLE\"}[5m])", "legendFormat": "Gateway Unavailable", "refId": "D"}
       ],
       "title": "Payment Outcomes (5m rate)",
       "type": "timeseries"
