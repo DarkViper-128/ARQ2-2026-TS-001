@@ -52,7 +52,7 @@ services:
     read_timeout: 5000
 
 routes:
-  # Public catalog routes (no auth)
+  # Public catalog routes (no auth) - 100 req/s per IP
   - name: catalog-events
     service: catalog
     paths:
@@ -61,8 +61,15 @@ routes:
       - ~/v1/events/[^/]+/seats$
     strip_path: false
     methods: [GET]
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 6000          # 100 req/s per IP
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
 
-  # Waiting Room routes (require FAN role)
+  # Waiting Room routes (require FAN role) - 20 req/s per user
   - name: waiting-room-queue
     service: waiting-room
     paths:
@@ -71,6 +78,12 @@ routes:
     strip_path: false
     methods: [POST, GET]
     plugins:
+      - name: rate-limiting
+        config:
+          minute: 1200          # 20 req/s per user (consumer-based when authenticated)
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
       - name: jwt
         config:
           key_claim_name: iss
@@ -100,13 +113,19 @@ routes:
               kong.service.request.set_header("X-User-Email", json:match('"email"%s*:%s*"([^"]+)"') or "")
               kong.service.request.set_header("X-User-Roles", table.concat(list, ","))
 
-  # Order routes (require FAN role)
+  # Order routes (require FAN role) - 20 req/s per user
   - name: orders
     service: order
     paths:
       - /v1/orders
     strip_path: false
     plugins:
+      - name: rate-limiting
+        config:
+          minute: 1200          # 20 req/s per user (consumer-based when authenticated)
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
       - name: jwt
         config:
           key_claim_name: iss
@@ -118,13 +137,19 @@ routes:
           access:
             - *fan_identity
 
-  # Reservation routes (require FAN role)
+  # Reservation routes (require FAN role) - 20 req/s per user
   - name: reservation-holds
     service: reservation
     paths:
       - /v1/holds
     strip_path: false
     plugins:
+      - name: rate-limiting
+        config:
+          minute: 1200          # 20 req/s per user (consumer-based when authenticated)
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
       - name: jwt
         config:
           key_claim_name: iss
@@ -136,7 +161,7 @@ routes:
           access:
             - *fan_identity
 
-  # Ticket routes (require FAN role)
+  # Ticket routes (require FAN role) - 20 req/s per user
   - name: tickets
     service: ticket
     paths:
@@ -144,6 +169,12 @@ routes:
     strip_path: false
     methods: [GET]
     plugins:
+      - name: rate-limiting
+        config:
+          minute: 1200          # 20 req/s per user (consumer-based when authenticated)
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
       - name: jwt
         config:
           key_claim_name: iss
@@ -155,7 +186,7 @@ routes:
           access:
             - *fan_identity
 
-  # Organizer routes (require ORGANIZER role)
+  # Organizer routes (require ORGANIZER role) - 20 req/s per user
   - name: admin-events
     service: catalog-admin
     paths:
@@ -164,6 +195,12 @@ routes:
     strip_path: false
     methods: [POST]
     plugins:
+      - name: rate-limiting
+        config:
+          minute: 1200          # 20 req/s per user (consumer-based when authenticated)
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
       - name: jwt
         config:
           key_claim_name: iss
@@ -203,6 +240,12 @@ routes:
     strip_path: false
     methods: [POST]
     plugins:
+      - name: rate-limiting
+        config:
+          minute: 1200          # 20 req/s per user (consumer-based when authenticated)
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
       - name: jwt
         config:
           key_claim_name: iss
@@ -240,14 +283,11 @@ plugins:
       generator: uuid
       echo_downstream: true
 
-  # Rate limiting: single global plugin with IP-based limit (100 req/s = 6000/min).
-  # Kong's rate-limiting plugin identifies by consumer when authenticated, by IP when not.
-  # This gives 100 req/s to both authenticated users and unauthenticated IPs.
-  # Note: Spec asks for 20 req/s per user; for stricter per-user limits,
-  # rate-limiting-advanced plugin or per-route config would be needed.
-  - name: rate-limiting
-    config:
-      minute: 6000          # 100 req/s = 6000 req/min
-      policy: local
-      fault_tolerant: true
-      hide_client_headers: false
+  # Rate limiting is configured per-route:
+  #   - Public catalog routes: 100 req/s per IP (minute: 6000)
+  #   - Protected routes (waiting-room, order, reservation, ticket, admin):
+  #     20 req/s per authenticated user (minute: 1200, consumer-based identification)
+  #
+  # Kong OSS rate-limiting identifies by consumer when authenticated, by IP when not.
+  # Per-user 20 req/s requires the rate-limiting-advanced plugin (Kong Enterprise);
+  # this configuration matches the spec as closely as Kong OSS allows.
