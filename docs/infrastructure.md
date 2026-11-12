@@ -1,4 +1,4 @@
-# Local infrastructure (Wave 2 - Phases 0 and 1)
+# Local infrastructure (Wave 2 - Phases 0 to 3)
 
 How to run the base infrastructure of FlashTix on a developer machine with Docker Compose.
 It implements the data and messaging containers of the
@@ -16,7 +16,7 @@ For the code layout and how to create a service, see [monorepo.md](monorepo.md).
 - Docker Desktop (includes Docker Compose v2). Check with `docker --version` and `docker compose version`.
 - Docker Desktop must be running before any `docker compose` command.
 - Node.js 20 or newer, only if you want to build the code outside Docker.
-- Free ports: `1025`, `3001`-`3005`, `3307`-`3311`, `5672`, `6379`, `6380`, `8000`, `8001`, `8025`, `8080`, `8090`, `9000`, `9090`, `15672`.
+- Free ports: `1025`, `3001`-`3007`, `3307`-`3311`, `5672`, `6379`, `6380`, `8000`, `8001`, `8025`, `8080`, `8090`, `9000`, `9090`, `15672`.
 - About 6 GB of free RAM when everything is up.
 
 ## Quick start
@@ -55,7 +55,10 @@ Credentials live in `.env`, which is ignored by Git. `.env.example` is the templ
 | --- | --- | --- |
 | `MYSQL_ROOT_PASSWORD` | the five MySQL databases | Root password shared by every MySQL server |
 | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` | `rabbitmq` | Broker credentials |
-| `TICKET_BUCKET` | `ticket-files-init` | S3 bucket created at startup for the ticket PDFs |
+| `TICKET_BUCKET` | `ticket-files-init`, `ticket`, `notification` | S3 bucket for the ticket PDFs |
+| `TICKET_QR_SECRET` | `ticket` | Secret that signs the QR payload of every ticket (HMAC) |
+| `S3_PUBLIC_ENDPOINT` | `ticket` | Address of the bucket as the **browser** reaches it; the download link is signed for it |
+| `MAIL_FROM` | `notification` | From header of the emails |
 | `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD` | `keycloak` | Admin console at <http://localhost:8080> |
 | `MOCK_LATENCY_MIN_MS` / `MOCK_LATENCY_MAX_MS` | `payment-gateway-mock` | Simulated gateway latency. The real one takes up to 15 s |
 | `MOCK_DECLINE_RATE` / `MOCK_ERROR_RATE` / `MOCK_TIMEOUT_RATE` | `payment-gateway-mock` | Share of charges that are declined, fail or never answer |
@@ -87,6 +90,8 @@ Use values without spaces, quotes or `$`. MySQL stores the root password the fir
 | `order` | built from `services/order` | 3003 | Order Service | Checkout saga and source of truth for every sale |
 | `waiting-room` | built from `services/waiting-room` | 3004 | Waiting Room Service | Virtual queue and admission tokens |
 | `payment-worker` | built from `services/payment-worker` | 3005 (health only) | Payment Worker | Charges and refunds against the legacy gateway |
+| `ticket` | built from `services/ticket` | 3006 | Ticket Service | PDF + QR ticket per seat, signed download URL |
+| `notification` | built from `services/notification` | 3007 (health only) | Notification Worker | Emails the fan, once per dedup key |
 
 The Reservation Service also listens on `50051` for the `LockHold` gRPC call of the Order
 Service. That port is internal to `flashtix-net`: it is not published and Kong does not route it.
@@ -243,10 +248,14 @@ curl -s localhost:9090/            # must list the "tickets" bucket
 | MinIO for the ticket files | `adobe/s3mock`, same S3 API | **Needs a team decision**, see above |
 | Object storage with credentials and persistence | Unauthenticated, in-memory | Development only |
 | HAProxy in front of Kong | Not included | Phase 3 (GW-6), optional |
-| Role checks per route, `X-User-Id` set by the gateway | Not included | Phase 3 (GW-3, GW-4) |
+| Role checks per route, `X-User-Id` set by the gateway | `post-function` plugin on every protected route | Done (Phase 3, GW-3, GW-4) |
 | Waiting Room and the admission token on `POST /holds` | Included | Done (Phase 2) |
 | Order Service and Payment Worker (checkout saga) | Included | Done (Phase 2) |
-| Ticket Service and Notification Worker | Not included | Phase 3 |
+| Ticket Service and Notification Worker | Included | Done (Phase 3) |
+| Organizer endpoints (`/admin/events`, `/publish`, `/admin/orders/{id}/refund`) | Included | Done (Phase 3) |
+| Push notifications (FCM) | Not included: email only | Pending. Needs provider credentials |
+| Live order status with SSE (`GET /orders/{id}/events`) | Not included | Pending. `GET /orders/{id}` works |
+| Rate limiting (20 req/s per user, 100 req/s per IP) | Not included | Pending |
 | Prometheus, Loki, Grafana (observability) | Not included | Phase 4 |
 
 If any of these differences becomes a permanent decision (for example, dropping Sentinel or
@@ -334,3 +343,46 @@ the mock back to the `.env.example` defaults at the end.
 | `ADMISSION_TOKEN_SECRET` | `.env`, shared by Waiting Room and Reservation | must be set |
 | `PAYMENT_RETRY_DELAYS_MS` | `.env` | `2000,10000,30000` |
 | `HOLD_TTL_SECONDS`, `HOLD_LOCK_SECONDS`, `HOLD_SWEEP_INTERVAL_MS` | `docker-compose.yml` (reservation) | 600, 300, 5000 |
+
+## Tickets, emails and the organizer console (Phase 3)
+
+Phase 3 closes feature F5 and adds the organizer endpoints:
+
+```text
+order.confirmed -> Ticket Service: one PDF + signed QR per seat (S3), ticket.issued
+ticket.issued   -> Notification Worker: ONE email with every PDF attached (Mailpit)
+order.failed / order.cancelled -> Notification Worker: email to the fan
+GET /v1/tickets/{id} (FAN, holder) -> qrPayload + download link valid 900 s
+POST /v1/admin/events, .../publish, /v1/admin/orders/{id}/refund (ORGANIZER)
+```
+
+- **Gateway (GW-3, GW-4).** After the `jwt` plugin verifies the signature, a
+  `post-function` plugin sets `X-User-Id`, `X-User-Email` and `X-User-Roles` from the token,
+  always overwriting what the client sent, and answers `403 FORBIDDEN` on organizer routes
+  when the token has no `ORGANIZER` role. The services read those headers and the organizer
+  endpoints check the role again, in case a service is ever reached without the gateway.
+  Fan routes require a valid token, not specifically the `FAN` role, because an organizer
+  may read an order (`GET /orders/{id}`).
+- **Tickets.** `UNIQUE (order_id, seat_id)` in `ticket-db` is what makes ticket creation
+  idempotent. The QR is `FTX1.<ticketId>.<HMAC>`; the HMAC covers the ticket, the event and
+  the seat (`signTicketQr` / `verifyTicketQr` in `@flashtix/shared`).
+- **Emails.** Every email has a dedup key in `notification-db` (`ticket.issued:<orderId>`,
+  `order.failed:<orderId>`, `order.cancelled:<orderId>`) and is sent under a row lock. Open
+  <http://localhost:8025> to read them. If SMTP fails the event goes through the retry ladder
+  and the DLQ, and a later delivery sends it because the row is still `PENDING`.
+- **Organizer.** `POST /admin/events` saves a `DRAFT` (hidden from the public catalog),
+  `publish` makes it `PUBLISHED` and preloads the cache, and the Catalog Service opens the
+  sale (`ON_SALE`) at `saleStartsAt` (`SALE_OPEN_INTERVAL_MS`, default 5 s). The refund
+  starts the same compensation as a seat conflict and the saga finishes it.
+
+`ticket-db` and `notification-db` load their schemas from `infra/mysql/ticket` and
+`infra/mysql/notification` the first time their volume is created. If you already had those
+volumes, recreate them once:
+`docker compose rm -sf ticket-db notification-db && docker volume rm flashtix_ticket-db-data flashtix_notification-db-data`.
+Add `TICKET_QR_SECRET` to your `.env` (see `.env.example`).
+
+Check it with:
+
+```bash
+node scripts/smoke-phase3.mjs   # roles, organizer console, tickets, one email, duplicate event, refund
+```

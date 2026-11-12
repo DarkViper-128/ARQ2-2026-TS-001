@@ -1,9 +1,11 @@
-# FlashTix API Gateway - declarative configuration (Wave 2, GW-1 and GW-2).
+# FlashTix API Gateway - declarative configuration (Wave 2, GW-1 to GW-4).
 # Kong runs DB-less: this file IS the configuration. Reload with
 #   docker compose restart api-gateway
 #
 # The gateway is the single entry point. Public catalog reads pass through; anything that
-# touches a seat requires a valid Keycloak JWT.
+# touches a seat requires a valid Keycloak JWT, and the organizer routes also require the
+# ORGANIZER role (GW-3). The gateway forwards the caller as X-User-Id, X-User-Email and
+# X-User-Roles (GW-4), always overwriting whatever the client sent.
 _format_version: "3.0"
 
 services:
@@ -44,6 +46,29 @@ services:
               claims_to_verify:
                 - exp
               run_on_preflight: true
+          # GW-4: the gateway sets X-User-Id, X-User-Email and X-User-Roles from the verified token.
+          - name: post-function
+            config:
+              access:
+                - &fan_identity |
+                  local token = (kong.request.get_header("authorization") or ""):match("^[Bb]earer%s+(.+)$")
+                  local b64 = token and token:match("^[%w_%-]+%.([%w_%-]+)%.")
+                  if not b64 then
+                    return kong.response.exit(401, { code = "UNAUTHENTICATED", status = 401, detail = "Malformed bearer token" })
+                  end
+                  b64 = b64:gsub("%-", "+"):gsub("_", "/")
+                  b64 = b64 .. string.rep("=", (4 - #b64 % 4) % 4)
+                  local json = ngx.decode_base64(b64) or ""
+                  local sub = json:match('"sub"%s*:%s*"([^"]+)"')
+                  if not sub then
+                    return kong.response.exit(401, { code = "UNAUTHENTICATED", status = 401, detail = "Bearer token has no subject" })
+                  end
+                  local roles = json:match('"realm_access"%s*:%s*{%s*"roles"%s*:%s*%[(.-)%]') or ""
+                  local list = {}
+                  for role in roles:gmatch('"([^"]+)"') do list[#list + 1] = role end
+                  kong.service.request.set_header("X-User-Id", sub)
+                  kong.service.request.set_header("X-User-Email", json:match('"email"%s*:%s*"([^"]+)"') or "")
+                  kong.service.request.set_header("X-User-Roles", table.concat(list, ","))
 
   - name: order
     url: http://order:3000
@@ -63,6 +88,11 @@ services:
               claims_to_verify:
                 - exp
               run_on_preflight: true
+          # GW-4: the gateway sets X-User-Id, X-User-Email and X-User-Roles from the verified token.
+          - name: post-function
+            config:
+              access:
+                - *fan_identity
 
   - name: reservation
     url: http://reservation:3000
@@ -83,10 +113,112 @@ services:
               claims_to_verify:
                 - exp
               run_on_preflight: true
+          # GW-4: the gateway sets X-User-Id, X-User-Email and X-User-Roles from the verified token.
+          - name: post-function
+            config:
+              access:
+                - *fan_identity
+
+  - name: ticket
+    url: http://ticket:3000
+    retries: 0
+    connect_timeout: 2000
+    read_timeout: 5000
+    routes:
+      # F5: reading a ticket requires a logged-in fan; the service checks that they hold it.
+      - name: tickets
+        paths:
+          - ~/v1/tickets/[^/]+$
+        strip_path: false
+        methods: [GET]
+        plugins:
+          - name: jwt
+            config:
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
+              run_on_preflight: true
+          # GW-4: the gateway sets X-User-Id, X-User-Email and X-User-Roles from the verified token.
+          - name: post-function
+            config:
+              access:
+                - *fan_identity
+
+  # Event Organizer endpoints (spec.md section 4, GW-3): the JWT is verified and the
+  # ORGANIZER role is required before the request reaches a service.
+  - name: catalog-admin
+    url: http://catalog:3000
+    retries: 0            # creating an event is not safe to retry blindly
+    connect_timeout: 2000
+    read_timeout: 10000   # the seat map of a stadium is a large insert
+    routes:
+      - name: admin-events
+        paths:
+          - ~/v1/admin/events$
+          - ~/v1/admin/events/[^/]+/publish$
+        strip_path: false
+        methods: [POST]
+        plugins:
+          - name: jwt
+            config:
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
+              run_on_preflight: true
+          # GW-3 + GW-4: only ORGANIZER tokens pass, identity headers set by the gateway.
+          - name: post-function
+            config:
+              access:
+                - &organizer_identity |
+                  local token = (kong.request.get_header("authorization") or ""):match("^[Bb]earer%s+(.+)$")
+                  local b64 = token and token:match("^[%w_%-]+%.([%w_%-]+)%.")
+                  if not b64 then
+                    return kong.response.exit(401, { code = "UNAUTHENTICATED", status = 401, detail = "Malformed bearer token" })
+                  end
+                  b64 = b64:gsub("%-", "+"):gsub("_", "/")
+                  b64 = b64 .. string.rep("=", (4 - #b64 % 4) % 4)
+                  local json = ngx.decode_base64(b64) or ""
+                  local sub = json:match('"sub"%s*:%s*"([^"]+)"')
+                  if not sub then
+                    return kong.response.exit(401, { code = "UNAUTHENTICATED", status = 401, detail = "Bearer token has no subject" })
+                  end
+                  local roles = json:match('"realm_access"%s*:%s*{%s*"roles"%s*:%s*%[(.-)%]') or ""
+                  if not roles:find('"ORGANIZER"', 1, true) then
+                    return kong.response.exit(403, { type = "https://api.flashtix.com/errors/forbidden", title = "Forbidden", status = 403, code = "FORBIDDEN", detail = "This endpoint requires the ORGANIZER role" }, { ["Content-Type"] = "application/problem+json" })
+                  end
+                  local list = {}
+                  for role in roles:gmatch('"([^"]+)"') do list[#list + 1] = role end
+                  kong.service.request.set_header("X-User-Id", sub)
+                  kong.service.request.set_header("X-User-Email", json:match('"email"%s*:%s*"([^"]+)"') or "")
+                  kong.service.request.set_header("X-User-Roles", table.concat(list, ","))
+
+  - name: order-admin
+    url: http://order:3000
+    retries: 0
+    connect_timeout: 2000
+    read_timeout: 5000
+    routes:
+      - name: admin-order-refund
+        paths:
+          - ~/v1/admin/orders/[^/]+/refund$
+        strip_path: false
+        methods: [POST]
+        plugins:
+          - name: jwt
+            config:
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
+              run_on_preflight: true
+          # GW-3 + GW-4: only ORGANIZER tokens pass, identity headers set by the gateway.
+          - name: post-function
+            config:
+              access:
+                - *organizer_identity
 
 consumers:
   # One consumer stands for "any user Keycloak vouched for". Roles are enforced per route
-  # later (GW-3), not here.
+  # by the post-function plugin (GW-3), not here.
   - username: keycloak-flashtix
     jwt_secrets:
       - key: "http://localhost:8080/realms/flashtix"

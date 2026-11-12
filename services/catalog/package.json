@@ -2,10 +2,11 @@
   "name": "@flashtix/catalog",
   "version": "0.1.0",
   "private": true,
-  "description": "Catalog Service: read-only events and seat availability from catalog-cache.",
+  "description": "Catalog Service: events and seat availability from catalog-cache, plus the organizer endpoints.",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "node --test",
     "clean": "rm -rf dist",
     "start": "node dist/main.js"
   },

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AppError } from '@flashtix/shared';
-import { currentUserEmail, currentUserId } from '@flashtix/nest-support';
+import { currentUserEmail, currentUserId, currentUserRoles } from '@flashtix/nest-support';
 import { OrdersService } from './orders.service';
 
 interface CreateOrderBody {
@@ -49,6 +49,6 @@ export class OrdersController {
 
   @Get(':orderId')
   async read(@Req() request: Request, @Param('orderId') orderId: string) {
-    return this.orders.get(orderId, currentUserId(request));
+    return this.orders.get(orderId, currentUserId(request), currentUserRoles(request).includes('ORGANIZER'));
   }
 }

@@ -33,7 +33,7 @@ Each service only touches its own data; the rest comes through its API or its ev
 
 - **Base URL:** `https://api.flashtix.com/v1`
 - **Auth:** `Authorization: Bearer <JWT>` from Keycloak (OIDC + PKCE). The gateway validates
-  it with Keycloak's JWKS and forwards `X-User-Id` / `X-User-Roles`.
+  it with Keycloak's JWKS and forwards `X-User-Id` / `X-User-Email` / `X-User-Roles`.
   Levels: **Public**, **FAN**, **ORGANIZER**.
 - **Headers:** `X-Correlation-Id` (traced through logs and events) · `Idempotency-Key`
   (required on `POST /orders`) · `X-Admission-Token` (required on `POST /holds`).
@@ -156,9 +156,9 @@ Login uses the standard OIDC endpoints of Keycloak (`/realms/flashtix/protocol/o
 
 ### `POST /admin/events` - Catalog
 - **Auth:** ORGANIZER
-- **Request body:** `name`, `artist`, `venue`, `startsAt`, `saleStartsAt`, `priceCategories[]`, `seats[]`
+- **Request body:** `name`, `artist`, `venue` (`name`, `city`), `startsAt`, `saleStartsAt`, `priceCategories[]`, `seats[]`
 - **Responses:** `201 Created` event saved in `catalog-db` as `DRAFT` (header `Location`) · `400 VALIDATION_ERROR` · `403 FORBIDDEN` · `409 EVENT_ALREADY_EXISTS` · `503`
-- **Example request:** `{ "name": "World Tour 2026", "artist": "The Headliners", "startsAt": "2026-11-20T23:00:00Z", "saleStartsAt": "2026-10-20T15:00:00Z", "priceCategories": [{ "category": "VIP", "price": { "amount": 45000000, "currency": "COP" } }], "seats": [{ "seatId": "A-12-07", "category": "VIP" }] }`
+- **Example request:** `{ "name": "World Tour 2026", "artist": "The Headliners", "venue": { "name": "Estadio El Campin", "city": "Bogota" }, "startsAt": "2026-11-20T23:00:00Z", "saleStartsAt": "2026-10-20T15:00:00Z", "priceCategories": [{ "category": "VIP", "price": { "amount": 45000000, "currency": "COP" } }], "seats": [{ "seatId": "A-12-07", "category": "VIP" }] }`
 
 ### `POST /admin/events/{eventId}/publish` - Catalog
 - **Auth:** ORGANIZER
@@ -209,7 +209,7 @@ with retry queue and dead-letter queue (`<queue>.dlq`).
 | `refund.requested` (order) | Order | Payment Worker | `orderId`, `paymentId`, `amount`, `reason` (`SEAT_CONFLICT`, `EVENT_CANCELLED`) | `orderId` (refund once) |
 | `refund.completed` (payment) | Payment Worker | Order | `orderId`, `paymentId`, `gatewayReference` | `orderId` |
 | `order.cancelled` (order) | Order | Notification | `orderId`, `userEmail`, `eventId`, `reason`, `refunded` | `dedupKey` |
-| `ticket.issued` (ticket) | Ticket | Notification | `orderId`, `userEmail`, `eventId`, `tickets[]` (`ticketId`, `seatId`, `pdfObjectKey`) | `dedupKey` |
+| `ticket.issued` (ticket) | Ticket | Notification | `orderId`, `userEmail`, `eventId`, `dedupKey`, `tickets[]` (`ticketId`, `seatId`, `pdfObjectKey`) | `dedupKey` |
 
 **Payment gateway calls** (Payment Worker): timeout 20 s, 3 retries (2 s, 10 s, 30 s),
 circuit breaker (opens at 50 % failures in 30 s). After the last failure it publishes

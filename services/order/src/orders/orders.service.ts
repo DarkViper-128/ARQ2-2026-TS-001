@@ -147,11 +147,56 @@ export class OrdersService {
     };
   }
 
-  /** GET /orders/{orderId}. Only the fan who owns the order may read it. */
-  async get(orderId: string, userId: string) {
+  /**
+   * ADM-3. `POST /admin/orders/{orderId}/refund`: the organizer refunds a CONFIRMED order
+   * (spec.md section 4). It starts the same compensation as a seat conflict: the order goes
+   * to REFUND_PENDING and refund.requested is written to the outbox in ONE transaction.
+   * The Payment Worker refunds the card, refund.completed arrives, the order becomes
+   * CANCELLED and order.cancelled tells the fan. Asking twice answers 409, never a second refund.
+   */
+  async refund(orderId: string, reason: string): Promise<{ orderId: string; status: 'REFUND_PENDING' }> {
+    await inTransaction(this.pool, async (connection) => {
+      const [rows] = await connection.query<RowDataPacket[]>(
+        'SELECT * FROM orders WHERE order_id = ? FOR UPDATE',
+        [orderId],
+      );
+      const order = rows[0];
+      if (!order) throw new AppError('ORDER_NOT_FOUND', `Order ${orderId} does not exist`);
+      if (order.status !== 'CONFIRMED' || !order.payment_id) {
+        throw new AppError(
+          'INVALID_ORDER_STATUS',
+          `Only a CONFIRMED order can be refunded, this one is ${String(order.status)}`,
+        );
+      }
+
+      const version = Number(order.version) + 1;
+      await connection.execute(
+        "UPDATE orders SET status = 'REFUND_PENDING', failure_reason = ?, version = ? WHERE order_id = ?",
+        [reason, version, orderId],
+      );
+      await addToOutbox(connection, {
+        eventType: 'refund.requested',
+        aggregateId: orderId,
+        aggregateVersion: version,
+        data: {
+          orderId,
+          paymentId: order.payment_id as string,
+          amount: { amount: Number(order.total_amount), currency: order.currency as string },
+          reason,
+        },
+      });
+    });
+
+    this.relay.kick();
+    this.logger.log(`order ${orderId} REFUND_PENDING (${reason})`);
+    return { orderId, status: 'REFUND_PENDING' };
+  }
+
+  /** GET /orders/{orderId}. The fan who owns the order or an ORGANIZER may read it. */
+  async get(orderId: string, userId: string, isOrganizer = false) {
     const [orders] = await this.pool.query<RowDataPacket[]>('SELECT * FROM orders WHERE order_id = ?', [orderId]);
     const order = orders[0];
-    if (!order || order.user_id !== userId) {
+    if (!order || (order.user_id !== userId && !isOrganizer)) {
       throw new AppError('ORDER_NOT_FOUND', `Order ${orderId} does not exist`);
     }
     const [seats] = await this.pool.query<RowDataPacket[]>(
