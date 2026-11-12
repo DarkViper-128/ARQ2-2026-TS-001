@@ -66,6 +66,7 @@ services:
       - "3310:3306"
     volumes:
       - ticket-db-data:/var/lib/mysql
+      - ./infra/mysql/ticket:/docker-entrypoint-initdb.d:ro
 
   notification-db:
     <<: *mysql
@@ -76,6 +77,7 @@ services:
       - "3311:3306"
     volumes:
       - notification-db-data:/var/lib/mysql
+      - ./infra/mysql/notification:/docker-entrypoint-initdb.d:ro
 
   # --- Redis (ADR 001: two instances with different policies) ----------------
   # catalog-cache: a cache may evict data (LRU) and needs no persistence.
@@ -284,7 +286,7 @@ services:
       start_period: 40s
     networks: [flashtix-net]
 
-  # --- API Gateway (GW-1, GW-2) -----------------------------------------------
+  # --- API Gateway (GW-1 to GW-4) -----------------------------------------------
   # Single entry point. DB-less: infra/kong/kong.yml is the whole configuration.
   api-gateway:
     image: kong:3.8
@@ -309,6 +311,8 @@ services:
       waiting-room:
         condition: service_healthy
       order:
+        condition: service_healthy
+      ticket:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "kong", "health"]
@@ -460,6 +464,79 @@ services:
       rabbitmq-init:
         condition: service_completed_successfully
       payment-gateway-mock:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [flashtix-net]
+
+  # --- Ticket Service (feature F5) ---------------------------------------------
+  # Consumes order.confirmed, issues one PDF + QR ticket per seat, stores the PDF in the
+  # S3 bucket and publishes ticket.issued. Serves GET /v1/tickets/{id} through the gateway.
+  ticket:
+    build:
+      context: .
+      dockerfile: services/ticket/Dockerfile
+    environment:
+      PORT: 3000
+      TICKET_DB_HOST: ticket-db
+      TICKET_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      CATALOG_URL: http://catalog:3000
+      TICKET_QR_SECRET: ${TICKET_QR_SECRET}
+      TICKET_BUCKET: ${TICKET_BUCKET}
+      S3_ENDPOINT: http://ticket-files:9090
+      # The download link is opened by the browser of the fan, so it is signed for the host port.
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9090}
+    ports:
+      - "3006:3000"
+    depends_on:
+      ticket-db:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      ticket-files-init:
+        condition: service_completed_successfully
+      catalog:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [flashtix-net]
+
+  # --- Notification Worker (feature F5) -----------------------------------------
+  # No public API: consumes ticket.issued, order.failed and order.cancelled and emails the
+  # fan through Mailpit (SMTP), once per dedup key.
+  notification:
+    build:
+      context: .
+      dockerfile: services/notification/Dockerfile
+    environment:
+      PORT: 3000
+      NOTIFICATION_DB_HOST: notification-db
+      NOTIFICATION_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      MAIL_FROM: ${MAIL_FROM:-FlashTix <no-reply@flashtix.test>}
+      TICKET_BUCKET: ${TICKET_BUCKET}
+      S3_ENDPOINT: http://ticket-files:9090
+    ports:
+      - "3007:3000"
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      ticket-files-init:
+        condition: service_completed_successfully
+      mailpit:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
