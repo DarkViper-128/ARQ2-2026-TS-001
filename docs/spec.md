@@ -1,6 +1,6 @@
 # FlashTix - API and Contract Specification (OpenSpec)
 
-- **Version:** 1.0.0 (Wave 1) · **Date:** 2026-10-13 · **Status:** Draft
+- **Version:** 1.1.0 (Wave 2, Phase 4) · **Date:** 2026-11-12 · **Status:** Implemented
 - **Related:** [ADR 001 - Use of Redis](adrs/001-use-of-redis.md) · [C4 Level 2 diagram](assets/c4-container-diagram.jpg)
 
 FlashTix sells concert tickets to up to 500,000 fans at the same time. The platform SHALL
@@ -15,15 +15,22 @@ slow legacy gateway (up to 15 s) and email the ticket, **never selling the same 
 | Service | Technology | Responsibility | Data it owns | Feature |
 | --- | --- | --- | --- | --- |
 | Identity Provider | Keycloak 25 (OIDC) | Login; issues RS256 JWT with roles `FAN` / `ORGANIZER` | own schema | F1 |
-| Load Balancer + API Gateway | HAProxy 2.9 + Kong 3 | Single entry point: JWT validation, rate limiting, routing, `Idempotency-Key` | - | F1 |
+| API Gateway | Kong 3.8 (DB-less) | Single entry point: JWT validation, rate limiting, routing, `Idempotency-Key`, correlation ID | - | F1 |
 | Catalog Service | Node.js 20 · NestJS | Events, seat map and availability (cache-aside) | `catalog-db` (MySQL), `catalog-cache` (Redis) | F2 |
 | Waiting Room Service | Node.js 20 · NestJS | Virtual queue; admits fans in batches with a signed token | `hold-store` (Redis) | F3 |
 | Reservation Service | Node.js 20 · NestJS | Soft seat holds with TTL (atomic Lua script) | `hold-store` (Redis, AOF) | F3 |
-| Order Service | Node.js 20 · NestJS | Checkout **saga orchestrator**, order state, transactional outbox | `booking-db` (MySQL, source of truth) | F4 |
+| Order Service | Node.js 20 · NestJS | Checkout **saga orchestrator**, order state, transactional outbox, SSE endpoint | `booking-db` (MySQL, source of truth) | F4 |
 | Payment Worker | Node.js 20 · consumer | Calls the legacy gateway with timeout, retries, circuit breaker; refunds | `payment-db` (MySQL) | F4 |
 | Ticket Service | Node.js 20 · consumer | PDF + QR ticket, signed download URL | `ticket-db` (MySQL), MinIO | F5 |
 | Notification Worker | Node.js 20 · consumer | Email (SendGrid) and push (FCM) with dedup | `notification-db` (MySQL) | F5 |
-| Message Broker | RabbitMQ 3.13 | Asynchronous events between services | - | F4, F5 |
+| Message Broker | RabbitMQ 3.13 | Asynchronous events between services; Prometheus metrics on port 15692 | - | F4, F5 |
+| **Observability Stack** | | | | **F6** |
+| Prometheus | 2.54.1 | Metrics collection, 30-day retention | `prometheus-data` | F6 |
+| Loki | 2.9.4 | Log aggregation | `loki-data` | F6 |
+| Grafana | 10.2.2 | Dashboards: Platform Overview, Business Metrics | `grafana-data` | F6 |
+| Promtail | 2.9.4 | Container log shipping to Loki | - | F6 |
+| node-exporter | 1.7.0 | Host metrics | - | F6 |
+| cAdvisor | 0.49.1 | Container metrics | - | F6 |
 
 Each service only touches its own data; the rest comes through its API or its events.
 
@@ -288,7 +295,35 @@ The Ticket Service SHALL issue one ticket per seat from `order.confirmed`, and t
 
 ---
 
-## 7. Operational parameters
+## 7. Phase 4 Observability (F6)
+
+### Metrics (Prometheus)
+All services expose `/metrics` (Prometheus format) with custom metrics:
+- `http_requests_total` — request count by method, path, status
+- `orders_total` — orders by status
+- `payments_total` — payments by status
+- `rabbitmq_consumer_messages_total` — message consumption by queue
+
+Prometheus scrapes all targets every 15s with 30-day retention. All 12 targets confirmed UP.
+
+### Logs (Loki + Promtail)
+Promtail ships container logs to Loki with labels: `service`, `container`, `namespace`. Retention: 30 days.
+
+### Dashboards (Grafana)
+Two pre-provisioned dashboards:
+1. **Platform Overview** — request rate, error rate, latency (p50/p95/p99), saturation (CPU, memory)
+2. **Business Metrics** — orders by status, payments by status, tickets issued, queue depth
+
+### Infrastructure Metrics
+- **node-exporter** (port 9100) — host CPU, memory, disk, network
+- **cAdvisor** (port 8081) — per-container CPU, memory, network I/O
+
+### RabbitMQ Metrics
+RabbitMQ exposes Prometheus metrics on port 15692 via the `rabbitmq_prometheus` plugin.
+
+---
+
+## 8. Operational parameters
 
 | Parameter | Value |
 | --- | --- |
@@ -297,5 +332,6 @@ The Ticket Service SHALL issue one ticket per seat from `order.confirmed`, and t
 | Max seats per hold | 6 |
 | Gateway timeout / retries | 20 s / 3 (2 s, 10 s, 30 s) |
 | Event retries | 3 (1 s, 10 s, 60 s), then DLQ |
-| Rate limit | 20 req/s per user · 100 req/s per IP |
+| Rate limit | 100 req/s per IP (global); 20 req/s per user (planned, requires `rate-limiting-advanced`) |
 | Target p95 | catalog < 50 ms · hold < 100 ms · `POST /orders` < 300 ms |
+| p95 verification | Manual / smoke tests; automated latency tests not yet implemented |
