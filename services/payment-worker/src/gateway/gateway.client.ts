@@ -42,6 +42,11 @@ export class GatewayClient {
     },
   );
 
+  constructor() {
+    // Initialize gauge to the starting state (CLOSED = 0)
+    circuitBreakerStateGauge.set({ service: 'payment-worker' }, 0);
+  }
+
   charge(orderId: string, amount: { amount: number; currency: string }, paymentMethodToken: string) {
     return this.call<GatewayCharge>('POST', '/payments', { orderId, amount, paymentMethodToken });
   }
