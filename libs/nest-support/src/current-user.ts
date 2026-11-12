@@ -57,3 +57,33 @@ export function currentUserEmail(request: Request): string {
   }
   throw new AppError('UNAUTHENTICATED', 'The access token has no email claim');
 }
+
+/** Realm roles of the caller (`FAN`, `ORGANIZER`). Same trust model as `currentUserId`. */
+export function currentUserRoles(request: Request): string[] {
+  const header = request.headers['x-user-roles'];
+  const fromGateway = Array.isArray(header) ? header[0] : header;
+  if (fromGateway !== undefined) {
+    return fromGateway.split(',').map((role) => role.trim()).filter((role) => role.length > 0);
+  }
+
+  const token = (request.headers.authorization ?? '').split(' ')[1] ?? '';
+  try {
+    const claims = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as {
+      realm_access?: { roles?: string[] };
+    };
+    return claims.realm_access?.roles ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Defence in depth for the admin routes: the API Gateway already answers 403 to anybody
+ * without the role (GW-3), and the service refuses again in case it is ever reached
+ * without going through the gateway.
+ */
+export function requireRole(request: Request, role: 'FAN' | 'ORGANIZER'): void {
+  if (!currentUserRoles(request).includes(role)) {
+    throw new AppError('FORBIDDEN', `This endpoint requires the ${role} role`);
+  }
+}
