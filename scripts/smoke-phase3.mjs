@@ -28,6 +28,23 @@ let passed = 0;
 let failed = 0;
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
+// Latency tracking for p95 verification (spec: catalog < 50 ms, hold < 100 ms, POST /orders < 300 ms)
+const latencies = { catalog: [], hold: [], order: [] };
+
+function categoryFor(path) {
+  if (path.includes('/seats')) return 'catalog';
+  if (path === '/v1/holds') return 'hold';
+  if (path === '/v1/orders') return 'order';
+  return null;
+}
+
+function p95(values) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.ceil(sorted.length * 0.95) - 1;
+  return sorted[Math.max(0, index)];
+}
+
 function check(description, expected, actual) {
   const ok = JSON.stringify(expected) === JSON.stringify(actual);
   if (ok) passed++;
@@ -35,7 +52,9 @@ function check(description, expected, actual) {
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${description.padEnd(62)} ${ok ? JSON.stringify(actual) : `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`}`);
 }
 
-async function call(method, path, { token, headers = {}, body } = {}) {
+async function call(method, path, { token, headers = {}, body, category } = {}) {
+  const cat = category ?? categoryFor(path);
+  const start = Date.now();
   const response = await fetch(`${GATEWAY}${path}`, {
     method,
     headers: {
@@ -52,6 +71,8 @@ async function call(method, path, { token, headers = {}, body } = {}) {
   } catch {
     json = undefined;
   }
+  const elapsed = Date.now() - start;
+  if (cat) latencies[cat].push(elapsed);
   return { status: response.status, json, headers: response.headers };
 }
 
@@ -325,6 +346,20 @@ async function main() {
 
   // Back to the realistic defaults of .env.example.
   await mock({ latencyMinMs: 200, latencyMaxMs: 15000, declineRate: 0.05, errorRate: 0.05, timeoutRate: 0.02 });
+
+  console.log('\n== P95 Latency ==');
+  const p95Catalog = p95(latencies.catalog);
+  const p95Hold = p95(latencies.hold);
+  const p95Order = p95(latencies.order);
+  const catalogOk = p95Catalog === 0 || p95Catalog < 50;
+  const holdOk = p95Hold === 0 || p95Hold < 100;
+  const orderOk = p95Order === 0 || p95Order < 300;
+  const p95Passed = catalogOk && holdOk && orderOk;
+  if (!p95Passed) failed++;
+  else passed++;
+  console.log(`  catalog p95: ${p95Catalog}ms (target < 50ms) ${catalogOk ? 'PASS' : 'FAIL'}`);
+  console.log(`  hold p95:    ${p95Hold}ms (target < 100ms) ${holdOk ? 'PASS' : 'FAIL'}`);
+  console.log(`  POST /orders p95: ${p95Order}ms (target < 300ms) ${orderOk ? 'PASS' : 'FAIL'}`);
 
   console.log(`\npassed: ${passed}   failed: ${failed}`);
   process.exit(failed === 0 ? 0 : 1);
