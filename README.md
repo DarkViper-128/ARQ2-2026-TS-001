@@ -49,7 +49,9 @@ The solution has to cover five mandatory features:
 │   ├── waiting-room/    # virtual queue and admission tokens
 │   ├── reservation/     # soft seat holds with TTL, LockHold gRPC server
 │   ├── order/           # checkout saga, source of truth for every sale
-│   └── payment-worker/  # charges and refunds against the legacy gateway
+│   ├── payment-worker/  # charges and refunds against the legacy gateway
+│   ├── ticket/          # PDF + QR ticket per seat, signed download URL
+│   └── notification/    # emails the fan (tickets, failed and refunded orders), deduplicated
 ├── tools/
 │   └── payment-gateway-mock/   # stand-in for the legacy payment gateway
 ├── infra/
@@ -83,8 +85,9 @@ docker compose ps         # every service must be "healthy"
 ```
 
 This starts the infrastructure (five MySQL databases, two Redis instances, RabbitMQ with
-its full topology, S3 storage, Mailpit and the payment gateway mock) and the first
-services: Keycloak, the Kong API Gateway, the Catalog Service and the Reservation Service.
+its full topology, S3 storage, Mailpit and the payment gateway mock) and the services:
+Keycloak, the Kong API Gateway, Catalog, Waiting Room, Reservation, Order, Payment Worker,
+Ticket and Notification.
 The containers ending in `-init` set things up and exit, so `exited (0)` is expected.
 Stop everything with `docker compose down`.
 
@@ -94,6 +97,7 @@ first end-to-end flow with:
 ```bash
 ./scripts/smoke-phase1.sh             # Phase 1: gateway, holds, catalog
 node scripts/smoke-phase2.mjs         # Phase 2: queue, checkout saga, failure, refund
+node scripts/smoke-phase3.mjs         # Phase 3: tickets, emails, organizer console, roles
 node scripts/concurrency-holds.mjs    # 1000 requests for one seat, exactly one wins
 ```
 
@@ -121,7 +125,7 @@ New ADRs start from [`docs/adrs/000-template.md`](docs/adrs/000-template.md).
 ## Project phases
 
 - **Wave 1 - Planning, Design and Specification (done):** Tech Spec (DDD analysis, C4 container diagram, ADRs) and `docs/spec.md`.
-- **Wave 2 - Execution and Implementation (in progress):** Phase 0 (monorepo skeleton, shared library, RabbitMQ topology, object storage, mail catcher, payment gateway mock), Phase 1 (Keycloak, Kong as the single entry point, Catalog Service, Reservation Service and the first event-driven flow) and Phase 2 (Waiting Room, LockHold, Order Service with the checkout saga and transactional outbox, Payment Worker with retries, circuit breaker and refunds) are complete and covered by `scripts/smoke-phase1.sh`, `scripts/smoke-phase2.mjs` and `scripts/concurrency-holds.mjs`. Next are the Ticket Service, the Notification Worker, the admin endpoints and the observability stack. Target: containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
+- **Wave 2 - Execution and Implementation (in progress):** Phase 0 (monorepo skeleton, shared library, RabbitMQ topology, object storage, mail catcher, payment gateway mock), Phase 1 (Keycloak, Kong as the single entry point, Catalog Service, Reservation Service and the first event-driven flow) Phase 2 (Waiting Room, LockHold, Order Service with the checkout saga and transactional outbox, Payment Worker with retries, circuit breaker and refunds) and Phase 3 (Ticket Service, Notification Worker, organizer endpoints, role checks and identity headers at the gateway) are complete and covered by `scripts/smoke-phase1.sh`, `scripts/smoke-phase2.mjs`, `scripts/smoke-phase3.mjs` and `scripts/concurrency-holds.mjs`. Next is the observability stack. Target: containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
 
 ## Conventions
 
