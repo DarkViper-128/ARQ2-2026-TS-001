@@ -4,7 +4,7 @@ interface AuthContextType {
   token: string | null;
   user: { username: string; role: string } | null;
   isAuthenticated: boolean;
-  login: (token: string, username: string, role: string) => void;
+  login: (token: string | null, username: string, role: string) => void;
   logout: () => void;
 }
 
@@ -12,17 +12,22 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('flashtix_token');
+    const raw = localStorage.getItem('flashtix_token');
+    return raw === 'null' || raw === null ? null : raw;
   });
   const [user, setUser] = useState<{ username: string; role: string } | null>(() => {
     const raw = localStorage.getItem('flashtix_user');
     return raw ? JSON.parse(raw) : null;
   });
 
-  const login = useCallback((token: string, username: string, role: string) => {
+  const login = useCallback((token: string | null, username: string, role: string) => {
     setToken(token);
     setUser({ username, role });
-    localStorage.setItem('flashtix_token', token);
+    if (token) {
+      localStorage.setItem('flashtix_token', token);
+    } else {
+      localStorage.removeItem('flashtix_token');
+    }
     localStorage.setItem('flashtix_user', JSON.stringify({ username, role }));
   }, []);
 
@@ -34,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, isAuthenticated: !!token, login, logout }}>
+    <AuthContext.Provider value={{ token, user, isAuthenticated: !!user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

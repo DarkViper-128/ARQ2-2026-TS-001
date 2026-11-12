@@ -2,13 +2,23 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+type View = 'selector' | 'organizerLogin';
+
 export default function Login() {
+  const [view, setView] = useState<View>('selector');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const handleEnterAsFan = () => {
+    setError('');
+    // El fan entra sin credenciales: rol FAN, sin token real
+    login(null, 'fan', 'FAN');
+    navigate('/');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +50,7 @@ export default function Login() {
       const role = payload.realm_access?.roles?.[0] || 'FAN';
 
       login(data.access_token, username, role);
-      navigate('/');
+      navigate('/admin');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error de inicio de sesión');
     } finally {
@@ -51,45 +61,85 @@ export default function Login() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h1 style={styles.title}>FlashTix</h1>
-        <p style={styles.subtitle}>Inicia sesión para comprar entradas</p>
-        {error && <p style={styles.error}>{error}</p>}
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Usuario</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="fan1 o organizer1"
-              style={styles.input}
-              required
-            />
-          </div>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Contraseña</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              style={styles.input}
-              required
-            />
-          </div>
-          <button type="submit" disabled={loading} style={styles.button}>
-            {loading ? 'Ingresando...' : 'Iniciar sesión'}
-          </button>
-        </form>
-        <div style={styles.hint}>
-          <p>Usuarios de prueba:</p>
-          <ul style={styles.list}>
-            <li>fan1 / fan12345 (FAN)</li>
-            <li>fan2 / fan12345 (FAN)</li>
-            <li>organizer1 / organizer12345 (ORGANIZER)</li>
-            <li>organizer2 / organizer12345 (ORGANIZER)</li>
-          </ul>
-        </div>
+        {view === 'selector' ? (
+          <>
+            <h1 style={styles.title}>FlashTix</h1>
+            <p style={styles.subtitle}>
+              Elige cómo quieres entrar
+            </p>
+            {error && <p style={styles.error}>{error}</p>}
+            <div style={styles.roleButtons}>
+              <button
+                type="button"
+                onClick={handleEnterAsFan}
+                disabled={loading}
+                style={styles.roleBtn}
+              >
+                🎟️ Entrar como Fan
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('organizerLogin')}
+                disabled={loading}
+                style={styles.roleBtnOutline}
+              >
+                👤 Entrar como Organizador
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h1 style={styles.title}>FlashTix</h1>
+            <p style={styles.subtitle}>
+              Inicio de sesión — Organizador
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setView('selector');
+                setError('');
+              }}
+              style={styles.backBtn}
+            >
+              ← Volver
+            </button>
+            {error && <p style={styles.error}>{error}</p>}
+            <form onSubmit={handleSubmit} style={styles.form}>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Usuario</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="organizer1"
+                  style={styles.input}
+                  required
+                />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Contraseña</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  style={styles.input}
+                  required
+                />
+              </div>
+              <button type="submit" disabled={loading} style={styles.button}>
+                {loading ? 'Ingresando...' : 'Iniciar sesión'}
+              </button>
+            </form>
+            <div style={styles.hint}>
+              <p>Usuarios de prueba:</p>
+              <ul style={styles.list}>
+                <li>organizer1 / organizer12345 (ORGANIZER)</li>
+                <li>organizer2 / organizer12345 (ORGANIZER)</li>
+              </ul>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -110,10 +160,10 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 12,
     boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
     width: 100,
-    maxWidth: 400,
+    maxWidth: 420,
   },
-  title: { margin: 0, fontSize: 28, color: '#111827' },
-  subtitle: { color: '#6b7280', marginBottom: 20 },
+  title: { margin: '0 0 8px 0', fontSize: 28, color: '#111827' },
+  subtitle: { color: '#6b7280', marginBottom: 24 },
   error: {
     color: '#dc2626',
     background: '#fef2f2',
@@ -121,6 +171,43 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 6,
     fontSize: 14,
     marginBottom: 20,
+  },
+  roleButtons: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+  },
+  roleBtn: {
+    padding: 14,
+    background: '#2563eb',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: 8,
+    fontSize: 16,
+    fontWeight: 600,
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  roleBtnOutline: {
+    padding: 14,
+    background: '#ffffff',
+    color: '#2563eb',
+    border: '1px solid #2563eb',
+    borderRadius: 8,
+    fontSize: 16,
+    fontWeight: 600,
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  backBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#6b7280',
+    fontSize: 14,
+    cursor: 'pointer',
+    marginBottom: 16,
+    textAlign: 'left',
+    padding: 0,
   },
   form: { display: 'flex', flexDirection: 'column', gap: 15 },
   inputGroup: { display: 'flex', flexDirection: 'column', gap: 6 },
