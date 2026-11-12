@@ -241,3 +241,22 @@ plugins:
       header_name: X-Correlation-Id
       generator: uuid
       echo_downstream: true
+
+  # Rate limiting per spec.md: 20 req/s per user (by JWT sub), 100 req/s per IP.
+  # Two separate plugins: one keyed on consumer (user), one on IP.
+  - name: rate-limiting
+    config:
+      minute: 1200          # 20 req/s = 1200 req/min per user
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+      identifier: consumer    # keyed on Kong consumer (Keycloak user via JWT)
+      redis: null             # uses local memory; for multi-node use Redis
+  - name: rate-limiting
+    config:
+      minute: 6000          # 100 req/s = 6000 req/min per IP
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+      identifier: ip        # keyed on client IP
+      redis: null
