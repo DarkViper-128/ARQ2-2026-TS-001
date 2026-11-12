@@ -48,7 +48,7 @@ export class CatalogService {
     return `availability:${eventId}`;
   }
 
-  private static readonly EVENT_LIST_KEY = 'events:list';
+  static readonly EVENT_LIST_KEY = 'events:list';
 
   /** Reads through the cache; `loader` only runs on a miss. */
   private async cacheAside<T>(key: string, ttl: number, loader: () => Promise<T>): Promise<{ value: T; hit: boolean }> {
@@ -73,8 +73,33 @@ export class CatalogService {
     );
   }
 
+  /**
+   * Admin: loads an event and its seat map into the cache so the first fans of the sale
+   * never hit catalog-db (spec.md, POST /admin/events/{eventId}/publish).
+   */
+  async preload(eventId: string): Promise<void> {
+    const [event, seatMap] = await Promise.all([
+      this.repository.findEvent(eventId, true),
+      this.repository.findSeatMap(eventId),
+    ]);
+    await this.redis
+      .multi()
+      .set(CatalogService.eventKey(eventId), JSON.stringify(event), 'EX', TTL_EVENT_SECONDS)
+      .set(CatalogService.seatMapKey(eventId), JSON.stringify(seatMap), 'EX', TTL_SEATMAP_SECONDS)
+      .del(CatalogService.EVENT_LIST_KEY)
+      .exec();
+  }
+
+  /** Admin: forgets the cached event and the list, after its status changed. */
+  async evict(eventId: string): Promise<void> {
+    await this.redis.del(CatalogService.eventKey(eventId), CatalogService.EVENT_LIST_KEY);
+  }
+
   /** CAT-3: the seat map plus the live availability overlay. */
   async getSeats(eventId: string): Promise<{ seats: SeatView[]; hit: boolean; asOf: string }> {
+    // 404 for unknown and DRAFT events before serving a seat map (answered from the cache).
+    await this.getEvent(eventId);
+
     const { value: seatMap, hit } = await this.cacheAside(
       CatalogService.seatMapKey(eventId),
       TTL_SEATMAP_SECONDS,

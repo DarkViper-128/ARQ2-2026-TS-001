@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import Redis from 'ioredis';
 import { createPool } from 'mysql2/promise';
+import { AdminController } from './admin/admin.controller';
+import { AdminService } from './admin/admin.service';
+import { SaleOpener } from './admin/sale-opener';
 import { AvailabilityConsumers } from './consumers/availability.consumers';
 import { CatalogController } from './events/catalog.controller';
 import { CatalogRepository } from './events/catalog.repository';
@@ -9,8 +12,10 @@ import { HealthController } from './health.controller';
 import { MYSQL, REDIS } from './tokens';
 
 @Module({
-  controllers: [CatalogController, HealthController],
+  controllers: [CatalogController, AdminController, HealthController],
   providers: [
+    AdminService,
+    SaleOpener,
     CatalogService,
     CatalogRepository,
     AvailabilityConsumers,

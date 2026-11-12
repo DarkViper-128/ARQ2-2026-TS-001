@@ -63,7 +63,11 @@ export class CatalogRepository {
     return rows.map(CatalogRepository.toSummary);
   }
 
-  async findEvent(eventId: string): Promise<EventDetail> {
+  /**
+   * Drafts exist only for the organizer: the public read answers 404 until the event is
+   * published, so an unannounced concert never leaks through GET /events/{id}.
+   */
+  async findEvent(eventId: string, includeDrafts = false): Promise<EventDetail> {
     const [rows] = await this.pool.query<RowDataPacket[]>(
       `SELECT ${CatalogRepository.EVENT_COLUMNS}
          FROM events e JOIN venues v ON v.venue_id = e.venue_id
@@ -71,7 +75,9 @@ export class CatalogRepository {
       [eventId],
     );
     const row = rows[0];
-    if (!row) throw new AppError('EVENT_NOT_FOUND', `Event ${eventId} does not exist`);
+    if (!row || (row.status === 'DRAFT' && !includeDrafts)) {
+      throw new AppError('EVENT_NOT_FOUND', `Event ${eventId} does not exist`);
+    }
 
     const [prices] = await this.pool.query<RowDataPacket[]>(
       'SELECT category, price_amount, currency FROM price_categories WHERE event_id = ? ORDER BY price_amount DESC',
