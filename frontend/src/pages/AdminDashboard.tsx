@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 const API_BASE = '/v1';
 
@@ -36,6 +37,7 @@ interface ErrorLog {
 }
 
 const AdminDashboard: React.FC = () => {
+  const location = useLocation();
   const [token, setToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'events' | 'my-events' | 'orders' | 'monitoring'>('events');
   const [events, setEvents] = useState<Event[]>([]);
@@ -48,6 +50,7 @@ const AdminDashboard: React.FC = () => {
     ordersConfirmed: 0,
     refundsRequested: 0,
   });
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
     name: '',
@@ -65,21 +68,21 @@ const AdminDashboard: React.FC = () => {
   const [message, setMessage] = useState({ text: '', type: 'success' as 'success' | 'error' });
   const [loading, setLoading] = useState(false);
 
-  const apiFetch = async (path: string, options: RequestInit = {}): Promise<any> => {
-    const res = await fetch(`${API_BASE}${path}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
-      },
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || `Error ${res.status}`);
+  // Sincronizar la ruta de la URL con la tab activa (cada ruta = un dashboard)
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === '/admin/refunds') {
+      setActiveTab('orders');
+      setShowCreateForm(false);
+    } else if (path === '/admin/create') {
+      setActiveTab('events');
+      setShowCreateForm(true);
+    } else {
+      // /admin, /admin/events y cualquier otra
+      setActiveTab('events');
+      setShowCreateForm(false);
     }
-    return res.json();
-  };
+  }, [location.pathname]);
 
   useEffect(() => {
     const t = localStorage.getItem('flashtix_token');
@@ -127,6 +130,22 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const apiFetch = async (path: string, options: RequestInit = {}): Promise<any> => {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Error ${res.status}`);
+    }
+    return res.json();
+  };
+
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -152,6 +171,7 @@ const AdminDashboard: React.FC = () => {
       setMessage({ text: 'Evento creado en estado DRAFT', type: 'success' });
       setCreating(false);
       setCreateForm({ name: '', description: '', totalSeats: '', price: '' });
+      setShowCreateForm(false);
       loadData();
     } catch (err: any) {
       setMessage({ text: err.message || 'Error creando evento', type: 'error' });
@@ -268,7 +288,10 @@ const AdminDashboard: React.FC = () => {
 
       <div className="flex border-b mb-6">
         <button
-          onClick={() => setActiveTab('events')}
+          onClick={() => {
+            setActiveTab('events');
+            setShowCreateForm(false);
+          }}
           className={`px-6 py-4 border-b-2 font-medium transition ${
             activeTab === 'events' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
@@ -276,7 +299,10 @@ const AdminDashboard: React.FC = () => {
           Todos los Eventos
         </button>
         <button
-          onClick={() => setActiveTab('my-events')}
+          onClick={() => {
+            setActiveTab('my-events');
+            setShowCreateForm(false);
+          }}
           className={`px-6 py-4 border-b-2 font-medium transition ${
             activeTab === 'my-events' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
@@ -284,7 +310,10 @@ const AdminDashboard: React.FC = () => {
           Mis Eventos
         </button>
         <button
-          onClick={() => setActiveTab('orders')}
+          onClick={() => {
+            setActiveTab('orders');
+            setShowCreateForm(false);
+          }}
           className={`px-6 py-4 border-b-2 font-medium transition ${
             activeTab === 'orders' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
@@ -292,7 +321,10 @@ const AdminDashboard: React.FC = () => {
           Ordenes
         </button>
         <button
-          onClick={() => setActiveTab('monitoring')}
+          onClick={() => {
+            setActiveTab('monitoring');
+            setShowCreateForm(false);
+          }}
           className={`px-6 py-4 border-b-2 font-medium transition ${
             activeTab === 'monitoring' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
@@ -303,59 +335,69 @@ const AdminDashboard: React.FC = () => {
 
       {activeTab === 'events' && (
         <div>
-          <div className="bg-white p-6 rounded-xl shadow mb-6 border border-gray-200">
-            <h2 className="text-xl font-semibold mb-4">Crear Evento</h2>
-            <form onSubmit={handleCreateEvent} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del evento</label>
-                <input
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  placeholder="Ej. Concierto Rock 2026"
-                  value={createForm.name}
-                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descripcion</label>
-                <input
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  placeholder="Descripcion del evento"
-                  value={createForm.description}
-                  onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Boletas disponibles</label>
-                <input
-                  type="number"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  placeholder="Ej. 200"
-                  value={createForm.totalSeats}
-                  onChange={(e) => setCreateForm({ ...createForm, totalSeats: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Costo por boleta (COP)</label>
-                <input
-                  type="number"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  placeholder="Ej. 45000"
-                  value={createForm.price}
-                  onChange={(e) => setCreateForm({ ...createForm, price: e.target.value })}
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={creating || loading}
-                className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white rounded-lg font-semibold text-lg hover:bg-blue-700 disabled:opacity-50 transition"
-              >
-                {creating ? 'Creando...' : 'Crear Evento'}
-              </button>
-            </form>
-          </div>
+          {/* Boton para mostrar/ocultar el formulario de crear evento */}
+          <button
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="mb-4 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition flex items-center gap-2"
+          >
+            {showCreateForm ? 'Ocultar formulario' : '+'} Crear Evento
+          </button>
+
+          {showCreateForm && (
+            <div className="bg-white p-6 rounded-xl shadow mb-6 border border-gray-200">
+              <h2 className="text-xl font-semibold mb-4">Crear Evento</h2>
+              <form onSubmit={handleCreateEvent} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del evento</label>
+                  <input
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Ej. Concierto Rock 2026"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Descripcion</label>
+                  <input
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Descripcion del evento"
+                    value={createForm.description}
+                    onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Boletas disponibles</label>
+                  <input
+                    type="number"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Ej. 200"
+                    value={createForm.totalSeats}
+                    onChange={(e) => setCreateForm({ ...createForm, totalSeats: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Costo por boleta (COP)</label>
+                  <input
+                    type="number"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Ej. 45000"
+                    value={createForm.price}
+                    onChange={(e) => setCreateForm({ ...createForm, price: e.target.value })}
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={creating || loading}
+                  className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white rounded-lg font-semibold text-lg hover:bg-blue-700 disabled:opacity-50 transition"
+                >
+                  {creating ? 'Creando...' : 'Crear Evento'}
+                </button>
+              </form>
+            </div>
+          )}
 
           <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
             <div className="p-6 border-b border-gray-200">
@@ -590,75 +632,79 @@ const AdminDashboard: React.FC = () => {
       )}
 
       {activeTab === 'monitoring' && (
-        <div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow border border-gray-200">
-              <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-                <h2 className="text-lg font-semibold text-gray-900">Errores Recientes</h2>
-                <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-1 rounded">{errorLogs.length}</span>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {errorLogs.length === 0 ? (
-                  <div className="p-8 text-center text-gray-500 text-sm">Sin errores recientes</div>
-                ) : (
-                  errorLogs.map((err, i) => (
-                    <div key={i} className="p-6">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{err.operation}</p>
-                          <p className="text-sm text-gray-600">{err.message}</p>
-                        </div>
-                        <span className="text-xs text-gray-400">{new Date(err.timestamp).toLocaleString()}</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Grafico 1: Errores en la compra */}
+          <div className="bg-white rounded-xl shadow border border-gray-200">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900">Errores en la Compra</h2>
+              <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-1 rounded">{errorLogs.length}</span>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {errorLogs.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 text-sm">Sin errores de compra recientes</div>
+              ) : (
+                errorLogs.map((err, i) => (
+                  <div key={i} className="p-6">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{err.operation}</p>
+                        <p className="text-sm text-gray-600">{err.message}</p>
                       </div>
+                      <span className="text-xs text-gray-400">{new Date(err.timestamp).toLocaleString()}</span>
                     </div>
-                  ))
-                )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Grafico 2: Compras de boletos exitosas */}
+          <div className="bg-white rounded-xl shadow border border-gray-200 p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">Compras de Boletos Exitosas</h2>
+              <span className="text-xs font-medium bg-green-100 text-green-700 px-2 py-1 rounded">{stats.ordersConfirmed}</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6 mb-6">
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="text-3xl font-bold text-green-600">{stats.ordersConfirmed}</div>
+                <div className="text-sm text-gray-500 mt-1">Ordenes confirmadas</div>
+              </div>
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="text-3xl font-bold text-blue-600">{stats.eventsPublished}</div>
+                <div className="text-sm text-gray-500 mt-1">Eventos publicados</div>
+              </div>
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="text-3xl font-bold text-indigo-600">{stats.eventsCreated}</div>
+                <div className="text-sm text-gray-500 mt-1">Eventos creados</div>
+              </div>
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="text-3xl font-bold text-orange-600">{stats.refundsRequested}</div>
+                <div className="text-sm text-gray-500 mt-1">Reembolsos solicitados</div>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-6">Exitos por Categoria</h2>
-              <div className="grid grid-cols-2 gap-6 mb-6">
-                <div className="bg-gray-50 p-6 rounded-xl">
-                  <div className="text-3xl font-bold text-green-600">{stats.eventsCreated}</div>
-                  <div className="text-sm text-gray-500 mt-1">Eventos creados</div>
-                </div>
-                <div className="bg-gray-50 p-6 rounded-xl">
-                  <div className="text-3xl font-bold text-blue-600">{stats.eventsPublished}</div>
-                  <div className="text-sm text-gray-500 mt-1">Eventos publicados</div>
-                </div>
-                <div className="bg-gray-50 p-6 rounded-xl">
-                  <div className="text-3xl font-bold text-indigo-600">{stats.ordersConfirmed}</div>
-                  <div className="text-sm text-gray-500 mt-1">Ordenes confirmadas</div>
-                </div>
-                <div className="bg-gray-50 p-6 rounded-xl">
-                  <div className="text-3xl font-bold text-orange-600">{stats.refundsRequested}</div>
-                  <div className="text-sm text-gray-500 mt-1">Reembolsos solicitados</div>
-                </div>
-              </div>
-
-              <div className="mt-6 h-64">
-                <svg className="w-full h-full" viewBox="0 0 700 350">
-                  <defs>
-                    <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop stopColor="rgb(99,102,241)" stopOpacity="1" offset="0%" />
-                      <stop stopColor="rgb(79,70,229)" stopOpacity="1" offset="100%" />
-                    </linearGradient>
-                  </defs>
-                  <rect x="60" y="120" width="140" height="160" fill="url(#grad1)" rx="10" />
-                  <rect x="230" y="60" width="140" height="220" fill="url(#grad1)" rx="10" />
-                  <rect x="400" y="170" width="140" height="100" fill="url(#grad1)" rx="10" />
-                  <rect x="570" y="90" width="140" height="140" fill="url(#grad1)" rx="10" />
-                  <text x="130" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Creados</text>
-                  <text x="300" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Publicados</text>
-                  <text x="470" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Confirmadas</text>
-                  <text x="640" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Reembolsos</text>
-                  <text x="130" y="105" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.eventsCreated}</text>
-                  <text x="300" y="45" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.eventsPublished}</text>
-                  <text x="470" y="160" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.ordersConfirmed}</text>
-                  <text x="640" y="75" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.refundsRequested}</text>
-                </svg>
-              </div>
+            <div className="mt-6 h-64">
+              <svg className="w-full h-full" viewBox="0 0 700 350">
+                <defs>
+                  <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop stopColor="rgb(99,102,241)" stopOpacity="1" offset="0%" />
+                    <stop stopColor="rgb(79,70,229)" stopOpacity="1" offset="100%" />
+                  </linearGradient>
+                </defs>
+                <rect x="60" y="120" width="140" height="160" fill="url(#grad1)" rx="10" />
+                <rect x="230" y="60" width="140" height="220" fill="url(#grad1)" rx="10" />
+                <rect x="400" y="170" width="140" height="100" fill="url(#grad1)" rx="10" />
+                <rect x="570" y="90" width="140" height="140" fill="url(#grad1)" rx="10" />
+                <text x="130" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Confirmadas</text>
+                <text x="300" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Publicadas</text>
+                <text x="470" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Creadas</text>
+                <text x="640" y="310" text-anchor="middle" font-size="14" fill="#6b7280">Reembolsos</text>
+                <text x="130" y="105" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.ordersConfirmed}</text>
+                <text x="300" y="45" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.eventsPublished}</text>
+                <text x="470" y="160" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.eventsCreated}</text>
+                <text x="640" y="75" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.refundsRequested}</text>
+              </svg>
             </div>
           </div>
         </div>
