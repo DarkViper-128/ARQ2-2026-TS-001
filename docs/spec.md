@@ -288,6 +288,122 @@ The Ticket Service SHALL issue one ticket per seat from `order.confirmed`, and t
 
 ---
 
+## 7. Frontend Application (Wave 2, Frontend Phase)
+
+### 7.1 Stack
+
+| Layer | Technology | Version | Purpose |
+|-------|------------|---------|---------|
+| UI Framework | React | 18 | Component-based UI |
+| Build Tool | Vite | 5 | Dev server, HMR, production build |
+| Language | TypeScript | 5.x | Strict mode, type safety |
+| Routing | React Router | 6 | Client-side routing, route guards |
+| State | React Context | built-in | Auth state (token, user, role) |
+| HTTP | fetch API | native | Gateway calls via `/v1` proxy |
+| Styling | Inline styles | CSS-in-JS | Component-scoped styles |
+
+- **Dev server:** `http://localhost:5173`, proxies `/v1 → http://localhost:8000` (Kong API Gateway)
+- **Production:** `npm run build` → `dist/` (static assets)
+- **Strict mode:** `tsc --noEmit` must pass clean before commit
+
+### 7.2 Authentication Flow
+
+The frontend never handles passwords. Login is performed against Keycloak (OIDC password grant) externally or via the login page, which obtains a JWT and stores it in `localStorage` under keys `flashtix_token` and `flashtix_user`.
+
+`AuthContext` (`frontend/src/context/AuthContext.tsx`) provides:
+- `token` — JWT string or `null`
+- `user` — `{ username, role }` where role is `FAN` or `ORGANIZER`
+- `isAuthenticated` — boolean
+- `login(token, username, role)` — stores token + user in context and `localStorage`
+- `logout()` — clears context and `localStorage`
+
+On logout, the app navigates to `/login`.
+
+### 7.3 Role-Based Routing
+
+All routes live under `MainLayout` (sidebar + outlet). Route guards redirect based on role:
+
+| Path | Component | Guard | Visible to |
+|------|-----------|-------|------------|
+| `/login` | `Login` | none | unauthenticated |
+| `/` | `FanDashboard` | inside `MainLayout` | authenticated |
+| `/events/:eventId/seats` | `EventSeats` | inside `MainLayout` | authenticated |
+| `/hold` | `Hold` | inside `MainLayout` | authenticated |
+| `/order` | `Order` | inside `MainLayout` | authenticated |
+| `/tickets` | `Tickets` | inside `MainLayout` | authenticated |
+| `/orders` | `Orders` | inside `MainLayout` | authenticated |
+| `/fan` | `FanDashboard` | `FanRoute` (redirects non-FAN to `/`) | FAN only |
+| `/admin` | `AdminDashboard` | `OrganizerRoute` (redirects non-ORGANIZER to `/`) | ORGANIZER only |
+| `/admin/events` | `AdminDashboard` | `OrganizerRoute` | ORGANIZER only |
+| `/admin/create` | `AdminDashboard` | `OrganizerRoute` | ORGANIZER only |
+| `/admin/refunds` | `AdminDashboard` | `OrganizerRoute` | ORGANIZER only |
+
+`FanRoute` allows only `FAN` role; `OrganizerRoute` allows only `ORGANIZER` role. Unauthenticated users are redirected to `/login`.
+
+### 7.4 API Client (`frontend/src/lib/api.ts`)
+
+All calls go through `apiRequest(path, options, token)` which:
+- Prepends `/v1` base path (Kong gateway)
+- Adds `Authorization: Bearer <token>` header when token exists
+- Throws `Error('UNAUTHENTICATED')` on 401 → app clears storage and navigates to `/login`
+- Throws `Error('FORBIDDEN')` on 403
+- Throws `Error(errorBody.detail || 'Error <status>')` on other non-2xx responses
+- Returns parsed JSON body (or `null` for 204)
+
+Exported methods:
+- `api.get(path, token)` — GET
+- `api.post(path, body, token)` — POST
+- `api.delete(path, token)` — DELETE
+- `api.postWithHeaders(path, body, extraHeaders, token)` — POST with custom headers (used for `X-Admission-Token`)
+
+### 7.5 Response Helper (`frontend/src/lib/apiHelper.ts`)
+
+`extractList<T>(data)` normalizes API responses that may arrive as:
+- A plain array: `[...]`
+- A wrapped object: `{ events: [...] }`, `{ orders: [...] }`, `{ tickets: [...] }`, `{ data: [...] }`, etc.
+- A single object: `{ ... }` → wrapped into `[data]`
+
+This handles Kong/backend inconsistency where some endpoints return `{ events: [...] }` instead of a raw array.
+
+### 7.6 Pages
+
+| Page | File | Purpose |
+|------|------|---------|
+| Login | `frontend/src/pages/Login.tsx` | Keycloak OIDC login, stores token + user |
+| Fan Dashboard | `frontend/src/pages/FanDashboard.tsx` | Browse ON_SALE events, real-time polling (5s), "Crear Boleto" → `/events/:id/seats` |
+| Event Seats | `frontend/src/pages/EventSeats.tsx` | Seat selection for an event |
+| Hold | `frontend/src/pages/Hold.tsx` | Create seat hold with `X-Admission-Token` |
+| Order | `frontend/src/pages/Order.tsx` | Create order from hold with payment token |
+| Tickets | `frontend/src/pages/Tickets.tsx` | List user's tickets with QR + PDF download |
+| Orders | `frontend/src/pages/Orders.tsx` | List user's orders with status, seats, total |
+| Admin Dashboard | `frontend/src/pages/AdminDashboard.tsx` | Create/publish/delete events, view confirmed orders |
+
+### 7.7 Error Handling Policy
+
+Error banners are shown **only** for real execution failures (network errors, 4xx/5xx on endpoints that should work). Endpoints that do not exist in Kong (for example a `GET /v1/orders` list route when only `GET /v1/orders/{id}` is configured) return 404 and are silently ignored — they are not surfaced as user-facing errors.
+
+UNAUTHENTICATED (401) always clears storage and redirects to `/login`.
+
+### 7.8 Environment & Build
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `VITE_API_BASE` | `/v1` | API base path (proxied to Kong in dev) |
+
+Scripts:
+- `npm run dev` — Vite dev server on port 5173
+- `npm run build` — `tsc && vite build` → `dist/`
+- `npm run preview` — serve production build locally
+
+### 7.9 Test Users (Keycloak realm `flashtix`)
+
+| Username | Password | Role |
+|----------|----------|------|
+| `fan1`, `fan2` | `fan12345` | FAN |
+| `organizer1`, `organizer2` | `organizer12345` | ORGANIZER |
+
+---
+
 ## 7. Operational parameters
 
 | Parameter | Value |
