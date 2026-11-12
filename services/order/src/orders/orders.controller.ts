@@ -14,6 +14,10 @@ function header(request: Request, name: string): string {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? '';
 }
 
+function sseFormat(event: string, data: object): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
@@ -50,5 +54,43 @@ export class OrdersController {
   @Get(':orderId')
   async read(@Req() request: Request, @Param('orderId') orderId: string) {
     return this.orders.get(orderId, currentUserId(request), currentUserRoles(request).includes('ORGANIZER'));
+  }
+
+  /**
+   * SSE endpoint: GET /orders/{orderId}/events
+   * Streams live order status updates (spec.md section 4, F4).
+   * Auth: FAN (owner) or ORGANIZER.
+   */
+  @Get(':orderId/events')
+  async events(@Req() request: Request, @Param('orderId') orderId: string, @Res() response: Response) {
+    const userId = currentUserId(request);
+    const isOrganizer = currentUserRoles(request).includes('ORGANIZER');
+
+    // Set SSE headers
+    response.setHeader('Content-Type', 'text/event-stream');
+    response.setHeader('Cache-Control', 'no-cache');
+    response.setHeader('Connection', 'keep-alive');
+    response.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    response.flushHeaders();
+
+    // Send initial connection event
+    response.write(sseFormat('connected', { orderId }));
+
+    const clientClosed = () => {
+      response.end();
+    };
+    request.on('close', clientClosed);
+
+    try {
+      for await (const update of this.orders.subscribeToOrderEvents(orderId, userId, isOrganizer)) {
+        if (response.writableEnded) break;
+        response.write(sseFormat(update.event, update.data));
+      }
+    } finally {
+      request.off('close', clientClosed);
+      if (!response.writableEnded) {
+        response.end();
+      }
+    }
   }
 }

@@ -220,4 +220,68 @@ export class OrdersService {
       updatedAt: (order.updated_at as Date).toISOString(),
     };
   }
+
+  /**
+   * SSE: streams order status changes to the client.
+   * Polls the database every 2s and emits an event when the status/version changes.
+   * The fan who owns the order or an ORGANIZER may subscribe.
+   */
+  async *subscribeToOrderEvents(orderId: string, userId: string, isOrganizer = false): AsyncGenerator<{
+    event: 'order.update';
+    data: { orderId: string; status: string; version: number; updatedAt: string };
+  }> {
+    let lastVersion = -1;
+    let lastStatus = '';
+
+    // First, verify access and get initial state
+    const initial = await this.get(orderId, userId, isOrganizer);
+    lastVersion = initial.version;
+    lastStatus = initial.status;
+    yield {
+      event: 'order.update',
+      data: {
+        orderId: initial.orderId,
+        status: initial.status,
+        version: initial.version,
+        updatedAt: initial.updatedAt,
+      },
+    };
+
+    // Poll for changes
+    while (true) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      try {
+        const [orders] = await this.pool.query<RowDataPacket[]>(
+          'SELECT status, version, updated_at FROM orders WHERE order_id = ?',
+          [orderId],
+        );
+        const order = orders[0];
+        if (!order || (order.user_id !== userId && !isOrganizer)) {
+          return; // Order deleted or no longer accessible
+        }
+        const version = Number(order.version);
+        const status = order.status as string;
+        if (version !== lastVersion || status !== lastStatus) {
+          lastVersion = version;
+          lastStatus = status;
+          yield {
+            event: 'order.update',
+            data: {
+              orderId,
+              status,
+              version,
+              updatedAt: (order.updated_at as Date).toISOString(),
+            },
+          };
+        }
+        // Stop if order reached a terminal state
+        if (['CONFIRMED', 'CANCELLED', 'FAILED'].includes(status)) {
+          return;
+        }
+      } catch {
+        // If query fails, stop the stream
+        return;
+      }
+    }
+  }
 }
