@@ -1,0 +1,244 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "increase(orders_created_total[1h])", "legendFormat": "Orders Created (1h)", "refId": "A"},
+        {"expr": "increase(orders_confirmed_total[1h])", "legendFormat": "Orders Confirmed (1h)", "refId": "B"},
+        {"expr": "increase(orders_failed_total[1h])", "legendFormat": "Orders Failed (1h)", "refId": "C"},
+        {"expr": "increase(orders_cancelled_total[1h])", "legendFormat": "Orders Cancelled (1h)", "refId": "D"}
+      ],
+      "title": "Order Volume (Last Hour)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "increase(holds_created_total[1h])", "legendFormat": "Holds Created (1h)", "refId": "A"},
+        {"expr": "increase(holds_expired_total[1h])", "legendFormat": "Holds Expired (1h)", "refId": "B"},
+        {"expr": "increase(holds_consumed_total[1h])", "legendFormat": "Holds Consumed (1h)", "refId": "C"}
+      ],
+      "title": "Hold Volume (Last Hour)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "increase(payments_succeeded_total[1h])", "legendFormat": "Payments Succeeded (1h)", "refId": "A"},
+        {"expr": "increase(payments_failed_total[1h])", "legendFormat": "Payments Failed (1h)", "refId": "B"},
+        {"expr": "increase(refunds_completed_total[1h])", "legendFormat": "Refunds Completed (1h)", "refId": "C"}
+      ],
+      "title": "Payment Volume (Last Hour)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "increase(tickets_issued_total[1h])", "legendFormat": "Tickets Issued (1h)", "refId": "A"},
+        {"expr": "increase(emails_sent_total[1h])", "legendFormat": "Emails Sent (1h)", "refId": "B"}
+      ],
+      "title": "Ticket & Email Volume (Last Hour)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "id": 5,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "increase(orders_created_total[5m])", "legendFormat": "Created", "refId": "A"},
+        {"expr": "increase(orders_confirmed_total[5m])", "legendFormat": "Confirmed", "refId": "B"},
+        {"expr": "increase(orders_failed_total[5m])", "legendFormat": "Failed", "refId": "C"},
+        {"expr": "increase(orders_cancelled_total[5m])", "legendFormat": "Cancelled", "refId": "D"}
+      ],
+      "title": "Order State Transitions (5m rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "id": 6,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "increase(payments_succeeded_total[5m])", "legendFormat": "Succeeded", "refId": "A"},
+        {"expr": "increase(payments_failed_total{reason=\"DECLINED\"}[5m])", "legendFormat": "Declined", "refId": "B"},
+        {"expr": "increase(payments_failed_total{reason=\"GATEWAY_TIMEOUT\"}[5m])", "legendFormat": "Gateway Timeout", "refId": "C"},
+        {"expr": "increase(payments_failed_total{reason=\"GATEWAY_UNAVAILABLE\"}[5m])", "legendFormat": "Gateway Unavailable", "refId": "D"}
+      ],
+      "title": "Payment Outcomes (5m rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}, "unit": "s"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "id": 7,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(checkout_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum(rate(checkout_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum(rate(checkout_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99", "refId": "C"}
+      ],
+      "title": "Checkout Latency (Order Service)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}, "unit": "s"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "id": 8,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(payment_gateway_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum(rate(payment_gateway_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum(rate(payment_gateway_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99", "refId": "C"}
+      ],
+      "title": "Payment Gateway Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "id": 9,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "sum(rate(rabbitmq_consumer_messages_total{consumer=\"order\"}[5m])) by (event_type)", "legendFormat": "{{event_type}}", "refId": "A"}
+      ],
+      "title": "Order Service Event Consumption Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+      "id": 10,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "sum(rate(rabbitmq_consumer_messages_total{consumer=\"payment-worker\"}[5m])) by (event_type)", "legendFormat": "{{event_type}}", "refId": "A"}
+      ],
+      "title": "Payment Worker Event Consumption Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+      "id": 11,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "sum(rate(rabbitmq_consumer_messages_total{consumer=\"ticket\"}[5m])) by (event_type)", "legendFormat": "{{event_type}}", "refId": "A"}
+      ],
+      "title": "Ticket Service Event Consumption Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}, "unit": "short"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+      "id": 12,
+      "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {"expr": "sum(rate(rabbitmq_consumer_messages_total{consumer=\"notification\"}[5m])) by (event_type)", "legendFormat": "{{event_type}}", "refId": "A"}
+      ],
+      "title": "Notification Worker Event Consumption Rate",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["flashtix", "business", "orders", "payments"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "FlashTix - Business Metrics",
+  "uid": "flashtix-business",
+  "version": 1,
+  "weekStart": ""
+}

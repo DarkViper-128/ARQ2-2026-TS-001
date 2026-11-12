@@ -101,6 +101,11 @@ node scripts/smoke-phase3.mjs         # Phase 3: tickets, emails, organizer cons
 node scripts/concurrency-holds.mjs    # 1000 requests for one seat, exactly one wins
 ```
 
+**Observability (Phase 4):**
+- Grafana: <http://localhost:3000> (admin/admin by default, see `.env`)
+- Prometheus: <http://localhost:9091>
+- Loki: <http://localhost:3100>
+
 To build the code:
 
 ```bash
@@ -125,7 +130,7 @@ New ADRs start from [`docs/adrs/000-template.md`](docs/adrs/000-template.md).
 ## Project phases
 
 - **Wave 1 - Planning, Design and Specification (done):** Tech Spec (DDD analysis, C4 container diagram, ADRs) and `docs/spec.md`.
-- **Wave 2 - Execution and Implementation (in progress):** Phase 0 (monorepo skeleton, shared library, RabbitMQ topology, object storage, mail catcher, payment gateway mock), Phase 1 (Keycloak, Kong as the single entry point, Catalog Service, Reservation Service and the first event-driven flow) Phase 2 (Waiting Room, LockHold, Order Service with the checkout saga and transactional outbox, Payment Worker with retries, circuit breaker and refunds) and Phase 3 (Ticket Service, Notification Worker, organizer endpoints, role checks and identity headers at the gateway) are complete and covered by `scripts/smoke-phase1.sh`, `scripts/smoke-phase2.mjs`, `scripts/smoke-phase3.mjs` and `scripts/concurrency-holds.mjs`. Next is the observability stack. Target: containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
+- **Wave 2 - Execution and Implementation (in progress):** Phase 0 (monorepo skeleton, shared library, RabbitMQ topology, object storage, mail catcher, payment gateway mock), Phase 1 (Keycloak, Kong as the single entry point, Catalog Service, Reservation Service and the first event-driven flow), Phase 2 (Waiting Room, LockHold, Order Service with the checkout saga and transactional outbox, Payment Worker with retries, circuit breaker and refunds), Phase 3 (Ticket Service, Notification Worker, organizer endpoints, role checks and identity headers at the gateway), and Phase 4 (Observability stack: Prometheus, Loki, Grafana, Promtail, Node Exporter, cAdvisor) are complete. All phases are covered by `scripts/smoke-phase1.sh`, `scripts/smoke-phase2.mjs`, `scripts/smoke-phase3.mjs` and `scripts/concurrency-holds.mjs`. Target: containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
 
 ## Conventions
 

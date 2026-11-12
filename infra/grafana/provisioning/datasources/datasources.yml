@@ -1,0 +1,30 @@
+# FlashTix Grafana Datasources (Phase 4)
+# Auto-provisions Prometheus and Loki datasources.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"
+      queryTimeout: "60s"
+      httpMethod: "POST"
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+      timeout: "60s"
+      derivedFields:
+        - name: "traceID"
+          matcherRegex: "trace[=: ]*([a-f0-9]+)"
+          url: "http://localhost:16686/trace/${__value.raw}"
+          datasourceUid: "tempo"

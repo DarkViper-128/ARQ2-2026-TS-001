@@ -256,7 +256,7 @@ curl -s localhost:9090/            # must list the "tickets" bucket
 | Push notifications (FCM) | Not included: email only | Pending. Needs provider credentials |
 | Live order status with SSE (`GET /orders/{id}/events`) | Not included | Pending. `GET /orders/{id}` works |
 | Rate limiting (20 req/s per user, 100 req/s per IP) | Not included | Pending |
-| Prometheus, Loki, Grafana (observability) | Not included | Phase 4 |
+| Prometheus, Loki, Grafana (observability) | Included | Done (Phase 4) |
 
 If any of these differences becomes a permanent decision (for example, dropping Sentinel or
 keeping SeaweedFS), add or update the corresponding ADR and adjust [`spec.md`](spec.md), as
@@ -386,3 +386,80 @@ Check it with:
 ```bash
 node scripts/smoke-phase3.mjs   # roles, organizer console, tickets, one email, duplicate event, refund
 ```
+
+## Observability Stack (Phase 4)
+
+Phase 4 adds the complete observability stack for metrics, logs, and visualization:
+
+| Service | Image | Host Port | Purpose |
+| --- | --- | --- | --- |
+| `prometheus` | `prom/prometheus:v2.54.1` | 9091 | Metrics collection and storage |
+| `loki` | `grafana/loki:2.9.4` | 3100 | Log aggregation |
+| `promtail` | `grafana/promtail:2.9.4` | - | Log shipper (Docker logs → Loki) |
+| `grafana` | `grafana/grafana:10.2.2` | 3000 | Visualization (dashboards, alerts) |
+| `node-exporter` | `prom/node-exporter:v1.7.0` | 9100 | Host metrics (CPU, memory, disk, network) |
+| `cadvisor` | `gcr.io/cadvisor/cadvisor:v0.49.1` | 8081 | Container metrics (CPU, memory, network, disk I/O) |
+
+### Prometheus
+
+Scrapes metrics from all services and infrastructure components every 15 seconds.
+Configuration lives in `infra/prometheus/prometheus.yml`.
+
+**Scrape targets:**
+- All 7 microservices (`catalog`, `reservation`, `waiting-room`, `order`, `payment-worker`, `ticket`, `notification`) on `/metrics`
+- Kong API Gateway on `/metrics` (port 8001)
+- Node Exporter (host metrics)
+- cAdvisor (container metrics)
+- RabbitMQ management API (queue depths, message rates)
+- Prometheus self-monitoring
+
+### Loki
+
+Aggregates logs from all containers via Promtail. Logs are labeled with:
+- `service` (Docker Compose service name)
+- `container` (container name)
+- `project` (always `flashtix`)
+
+Retention: 30 days.
+
+### Grafana
+
+Pre-provisioned with:
+- **Datasources:** Prometheus (default), Loki
+- **Dashboards (in `FlashTix` folder):**
+  - *FlashTix - Platform Overview*: Service health, request rates, latency, error rates, queue depths, system resources
+  - *FlashTix - Business Metrics*: Order volume, hold volume, payment outcomes, checkout latency, payment gateway latency, event consumption rates
+
+Access at <http://localhost:3000> with credentials from `.env` (`GRAFANA_ADMIN`, `GRAFANA_PASSWORD`, defaults `admin`/`admin`).
+
+### Verify the Observability Stack
+
+```bash
+# Check all observability services are healthy
+docker compose ps prometheus loki promtail grafana node-exporter cadvisor
+
+# Prometheus targets
+curl -s http://localhost:9091/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
+
+# Loki ready
+curl -s http://localhost:3100/ready
+
+# Grafana health
+curl -s http://localhost:3000/api/health
+
+# Query a metric
+curl -s "http://localhost:9091/api/v1/query?query=up" | jq '.data.result[] | {job: .metric.job, value: .value[1]}'
+
+# View logs in Loki
+curl -s "http://localhost:3100/loki/api/v1/query?query={service=~\"flashtix.*\"}" | jq '.data.result[] | .stream'
+```
+
+### Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| Prometheus targets show `DOWN` | Check service health: `docker compose ps`. Ensure services expose `/metrics` on port 3000. |
+| No logs in Grafana/Loki | Promtail must have access to `/var/lib/docker/containers` and `/var/run/docker.sock`. On Linux, ensure the user is in the `docker` group. |
+| Grafana shows "No data" for dashboards | Verify Prometheus datasource is working: Explore → type `up` → Run query. |
+| cAdvisor permission errors | On Linux, run with `--privileged` or adjust AppArmor/SELinux. On Docker Desktop, usually works out of the box. |
+| High memory usage | The full stack (7 services + 5 DBs + 2 Redis + RabbitMQ + S3 + Mailpit + Keycloak + Kong + 6 observability) needs ~8 GB RAM. Increase Docker Desktop memory limit. |

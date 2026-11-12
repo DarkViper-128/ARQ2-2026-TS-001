@@ -1,0 +1,55 @@
+# FlashTix Promtail Configuration (Phase 4)
+# Ships Docker container logs to Loki.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: "flashtix-containers"
+    static_labels:
+      cluster: "flashtix-local"
+      environment: "development"
+      __path__: /var/lib/docker/containers/*/*log
+    pipeline_stages:
+      - docker: {}
+      - labels:
+          service:
+          container_name:
+      - match:
+          selector: '{service=~".+"}'
+          stages:
+            - regex:
+                expression: '^.*\/(?P<service_name>[^\/]+)\/.*$'
+            - labels:
+                service_name:
+
+  - job_name: "flashtix-services"
+    static_labels:
+      cluster: "flashtix-local"
+      environment: "development"
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+        filters:
+          - name: label
+            values: ["com.docker.compose.project=flashtix"]
+    relabel_configs:
+      - source_labels: ["__meta_docker_container_name"]
+        target_label: "container"
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: "service"
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_project"]
+        target_label: "project"
+    pipeline_stages:
+      - docker: {}
+      - labels:
+          service:
+          container:
+          project:
