@@ -207,7 +207,7 @@ services:
         const req = require('http').request(
           { host: 'ticket-files', port: 9090, path: '/' + process.env.TICKET_BUCKET, method: 'PUT' },
           (res) => {
-            const ok = res.statusCode < 400;
+            const ok = res.statusCode === 200 || res.statusCode === 409; // 200=created, 409=already exists
             console.log((ok ? 'bucket ready: ' : 'could not create bucket: ') + process.env.TICKET_BUCKET + ' (HTTP ' + res.statusCode + ')');
             process.exit(ok ? 0 : 1);
           },
