@@ -35,3 +35,25 @@ export function currentUserId(request: Request): string {
     throw new AppError('UNAUTHENTICATED', 'Bearer token has no subject');
   }
 }
+
+/**
+ * Email of the fan, taken from the `email` claim of the token the gateway already validated.
+ * The Order Service needs it because order.confirmed, order.failed and order.cancelled carry
+ * `userEmail` (spec.md section 5). Prefers `X-User-Email` once the gateway sets it (GW-4).
+ */
+export function currentUserEmail(request: Request): string {
+  const header = request.headers['x-user-email'];
+  const fromGateway = Array.isArray(header) ? header[0] : header;
+  if (fromGateway && fromGateway.trim().length > 0) return fromGateway.trim();
+
+  const token = (request.headers.authorization ?? '').split(' ')[1] ?? '';
+  try {
+    const claims = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as {
+      email?: string;
+    };
+    if (claims.email) return claims.email;
+  } catch {
+    // fall through
+  }
+  throw new AppError('UNAUTHENTICATED', 'The access token has no email claim');
+}

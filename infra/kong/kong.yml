@@ -14,11 +14,55 @@ services:
     read_timeout: 5000
     routes:
       # Public: browsing the catalog never requires a login (spec.md section 4).
+      # Exact regex paths, not the /v1/events prefix: a prefix would also swallow
+      # /v1/events/{id}/queue, which belongs to the Waiting Room and needs a token.
       - name: catalog-events
         paths:
-          - /v1/events
+          - ~/v1/events$
+          - ~/v1/events/[^/]+$
+          - ~/v1/events/[^/]+/seats$
         strip_path: false
         methods: [GET]
+
+  - name: waiting-room
+    url: http://waiting-room:3000
+    retries: 0
+    connect_timeout: 2000
+    read_timeout: 5000
+    routes:
+      # WR-2, WR-3: joining the queue and polling the turn require a logged-in fan.
+      - name: waiting-room-queue
+        paths:
+          - ~/v1/events/[^/]+/queue$
+          - ~/v1/events/[^/]+/queue/[^/]+$
+        strip_path: false
+        methods: [POST, GET]
+        plugins:
+          - name: jwt
+            config:
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
+              run_on_preflight: true
+
+  - name: order
+    url: http://order:3000
+    retries: 0            # POST /orders is made safe to retry by the Idempotency-Key, not by Kong
+    connect_timeout: 2000
+    read_timeout: 5000
+    routes:
+      # ORD-3: the checkout and reading an order require a logged-in fan.
+      - name: orders
+        paths:
+          - /v1/orders
+        strip_path: false
+        plugins:
+          - name: jwt
+            config:
+              key_claim_name: iss
+              claims_to_verify:
+                - exp
+              run_on_preflight: true
 
   - name: reservation
     url: http://reservation:3000

@@ -16,7 +16,7 @@ For the code layout and how to create a service, see [monorepo.md](monorepo.md).
 - Docker Desktop (includes Docker Compose v2). Check with `docker --version` and `docker compose version`.
 - Docker Desktop must be running before any `docker compose` command.
 - Node.js 20 or newer, only if you want to build the code outside Docker.
-- Free ports: `1025`, `3001`, `3002`, `3307`-`3311`, `5672`, `6379`, `6380`, `8000`, `8001`, `8025`, `8080`, `8090`, `9000`, `9090`, `15672`.
+- Free ports: `1025`, `3001`-`3005`, `3307`-`3311`, `5672`, `6379`, `6380`, `8000`, `8001`, `8025`, `8080`, `8090`, `9000`, `9090`, `15672`.
 - About 6 GB of free RAM when everything is up.
 
 ## Quick start
@@ -84,6 +84,18 @@ Use values without spaces, quotes or `$`. MySQL stores the root password the fir
 | `api-gateway` | `kong:3.8` | 8000 (proxy), 8001 (admin) | API Gateway | Single entry point, validates the JWT |
 | `catalog` | built from `services/catalog` | 3001 | Catalog Service | Events and seat availability, read-only |
 | `reservation` | built from `services/reservation` | 3002 | Reservation Service | Soft seat holds with TTL |
+| `order` | built from `services/order` | 3003 | Order Service | Checkout saga and source of truth for every sale |
+| `waiting-room` | built from `services/waiting-room` | 3004 | Waiting Room Service | Virtual queue and admission tokens |
+| `payment-worker` | built from `services/payment-worker` | 3005 (health only) | Payment Worker | Charges and refunds against the legacy gateway |
+
+The Reservation Service also listens on `50051` for the `LockHold` gRPC call of the Order
+Service. That port is internal to `flashtix-net`: it is not published and Kong does not route it.
+
+`booking-db` and `payment-db` load their schemas from `infra/mysql/booking` and
+`infra/mysql/payment` the first time their volume is created. If you already had those volumes
+from Phase 0 or 1, recreate them once so the schemas are applied:
+`docker compose rm -sf booking-db payment-db && docker volume rm flashtix_booking-db-data flashtix_payment-db-data`,
+then `docker compose up -d`.
 
 All services share the network `flashtix-net`, so containers reach each other by service name
 (for example `hold-store:6379`, `rabbitmq:5672`). The host ports above are only for tools running on your machine.
@@ -213,6 +225,7 @@ curl -s localhost:9090/            # must list the "tickets" bucket
 | `failed to extract layer ... input/output error` | Docker's disk is full or corrupted. Free disk space, run `docker system prune -f`, restart Docker Desktop and retry |
 | `Access denied for user 'root'` | The password differs from the one MySQL was initialized with. Fix `.env`, then `docker compose down -v` and `docker compose up -d` |
 | A port is already in use | Another program uses it. Stop it or change the host side of `ports` (for example `"3317:3306"`) |
+| Port `8080` is already in use (Keycloak) | Do not just change the port: the token issuer must stay `http://localhost:8080` because Kong pins it. Create a local `docker-compose.override.yml` (never commit it) that publishes `"8081:8080"` with `ports: !override` and sets `KC_HOSTNAME: http://localhost:8080`, then run the scripts with `KEYCLOAK=http://localhost:8081` |
 | `ticket-files-init` or `rabbitmq-init` shows `exited (0)` | Expected. They set things up and stop |
 | RabbitMQ starts but has no queues | The import failed. Check `docker compose logs rabbitmq-init`, then `docker compose up -d rabbitmq-init` to retry |
 | `ACCESS_REFUSED` when a service connects to RabbitMQ | The broker has no users. Check `docker compose exec rabbitmq rabbitmqctl list_users`; if it is empty, make sure `rabbitmq.conf` does **not** set `load_definitions` |
@@ -231,8 +244,9 @@ curl -s localhost:9090/            # must list the "tickets" bucket
 | Object storage with credentials and persistence | Unauthenticated, in-memory | Development only |
 | HAProxy in front of Kong | Not included | Phase 3 (GW-6), optional |
 | Role checks per route, `X-User-Id` set by the gateway | Not included | Phase 3 (GW-3, GW-4) |
-| Waiting Room and the admission token on `POST /holds` | Not included | Phase 2 |
-| Order, Payment, Ticket and Notification services | Not included | Phases 2 and 3 |
+| Waiting Room and the admission token on `POST /holds` | Included | Done (Phase 2) |
+| Order Service and Payment Worker (checkout saga) | Included | Done (Phase 2) |
+| Ticket Service and Notification Worker | Not included | Phase 3 |
 | Prometheus, Loki, Grafana (observability) | Not included | Phase 4 |
 
 If any of these differences becomes a permanent decision (for example, dropping Sentinel or
@@ -259,9 +273,11 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:8000/v1/holds 
   -H 'content-type: application/json' \
   -d '{"eventId":"3f0c8a52-0000-4000-8000-000000000001","seatIds":["A-01-01"]}'   # 401
 
-# 4. With the token it succeeds
+# 4. With the token AND the admission token of the virtual queue it succeeds
+#    (POST /v1/events/{id}/queue, then GET .../queue/{ticket} until ADMITTED; see Phase 2)
 curl -s -X POST http://localhost:8000/v1/holds \
-  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H "X-Admission-Token: $ADMISSION" \
+  -H 'content-type: application/json' \
   -d '{"eventId":"3f0c8a52-0000-4000-8000-000000000001","seatIds":["A-01-01"]}'
 
 # 5. The catalog shows that seat as HELD, without ever touching booking-db
@@ -284,3 +300,37 @@ curl -s "http://localhost:8000/v1/events/3f0c8a52-0000-4000-8000-000000000001/se
 with 200 seats: `A-01-01` to `A-08-10` (VIP) and `B-01-01` to `B-12-10` (GENERAL).
 The seed only runs when the volume is created, so after changing it you need
 `docker compose down -v`.
+
+## The checkout saga (Phase 2)
+
+Phase 2 adds the Waiting Room, the Order Service and the Payment Worker, so a fan can go
+from the queue to a confirmed order:
+
+```text
+POST /v1/events/{id}/queue -> GET .../queue/{ticket} (ADMITTED + admissionToken)
+POST /v1/holds  (X-Admission-Token)                    -> hold ACTIVE, seat.held
+POST /v1/orders (Idempotency-Key)  -> LockHold (gRPC)  -> order PENDING + payment.requested (outbox)
+Payment Worker -> legacy gateway (20 s timeout, retries 2/10/30 s, circuit breaker)
+payment.succeeded -> sold_seats + CONFIRMED + order.confirmed -> seat SOLD, hold consumed
+payment.failed    -> FAILED + order.failed                    -> seats released
+duplicate seat    -> REFUND_PENDING + refund.requested -> refund.completed -> CANCELLED
+```
+
+Check it with:
+
+```bash
+node scripts/smoke-phase2.mjs        # queue, holds, happy path, failure path, double sale, sweeper
+node scripts/concurrency-holds.mjs   # RES-8: 1000 requests for one seat, exactly one wins
+```
+
+`smoke-phase2.mjs` drives the payment gateway mock through `PUT /_mock/config` (fast, always
+declining, slow) and writes directly to `booking-db` and `hold-store` only to simulate the
+failures it needs (a seat sold behind the platform's back, a hold whose TTL ran out). It sets
+the mock back to the `.env.example` defaults at the end.
+
+| Setting | Where | Default |
+| --- | --- | --- |
+| `ADMISSION_BATCH_SIZE`, `ADMISSION_INTERVAL_MS` | `.env` | 500 fans every 10 s |
+| `ADMISSION_TOKEN_SECRET` | `.env`, shared by Waiting Room and Reservation | must be set |
+| `PAYMENT_RETRY_DELAYS_MS` | `.env` | `2000,10000,30000` |
+| `HOLD_TTL_SECONDS`, `HOLD_LOCK_SECONDS`, `HOLD_SWEEP_INTERVAL_MS` | `docker-compose.yml` (reservation) | 600, 300, 5000 |

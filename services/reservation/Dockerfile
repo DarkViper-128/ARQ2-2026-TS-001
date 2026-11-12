@@ -31,7 +31,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/libs/shared/dist libs/shared/dist
 COPY --from=build /app/libs/nest-support/dist libs/nest-support/dist
 COPY --from=build /app/services/reservation/dist services/reservation/dist
+# LockHold contract, loaded at runtime by the gRPC server (RES-4).
+COPY proto proto
 
 USER node
-EXPOSE 3000
+EXPOSE 3000 50051
 CMD ["node", "services/reservation/dist/main.js"]

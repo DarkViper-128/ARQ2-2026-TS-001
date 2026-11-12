@@ -44,6 +44,7 @@ services:
       - "3308:3306"
     volumes:
       - booking-db-data:/var/lib/mysql
+      - ./infra/mysql/booking:/docker-entrypoint-initdb.d:ro
 
   payment-db:
     <<: *mysql
@@ -54,6 +55,7 @@ services:
       - "3309:3306"
     volumes:
       - payment-db-data:/var/lib/mysql
+      - ./infra/mysql/payment:/docker-entrypoint-initdb.d:ro
 
   ticket-db:
     <<: *mysql
@@ -304,6 +306,10 @@ services:
         condition: service_healthy
       reservation:
         condition: service_healthy
+      waiting-room:
+        condition: service_healthy
+      order:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 10s
@@ -349,6 +355,10 @@ services:
       PORT: 3000
       HOLD_STORE_URL: redis://hold-store:6379
       HOLD_TTL_SECONDS: 600
+      HOLD_LOCK_SECONDS: 300
+      HOLD_SWEEP_INTERVAL_MS: 5000
+      GRPC_PORT: 50051
+      ADMISSION_TOKEN_SECRET: ${ADMISSION_TOKEN_SECRET}
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     ports:
       - "3002:3000"
@@ -357,6 +367,100 @@ services:
         condition: service_healthy
       rabbitmq-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [flashtix-net]
+
+  # --- Order Service (ORD-1 to ORD-7) ---------------------------------------------
+  # Checkout saga orchestrator. Owns booking-db, the source of truth for every sale.
+  order:
+    build:
+      context: .
+      dockerfile: services/order/Dockerfile
+    environment:
+      PORT: 3000
+      BOOKING_DB_HOST: booking-db
+      BOOKING_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RESERVATION_GRPC_URL: reservation:50051
+      CATALOG_URL: http://catalog:3000
+    ports:
+      - "3003:3000"
+    depends_on:
+      booking-db:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      reservation:
+        condition: service_healthy
+      catalog:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [flashtix-net]
+
+  # --- Waiting Room Service (WR-1 to WR-5) -------------------------------------
+  # Virtual queue in hold-store. Signs the admission token that POST /holds requires.
+  waiting-room:
+    build:
+      context: .
+      dockerfile: services/waiting-room/Dockerfile
+    environment:
+      PORT: 3000
+      HOLD_STORE_URL: redis://hold-store:6379
+      CATALOG_URL: http://catalog:3000
+      ADMISSION_TOKEN_SECRET: ${ADMISSION_TOKEN_SECRET}
+      ADMISSION_BATCH_SIZE: ${ADMISSION_BATCH_SIZE}
+      ADMISSION_INTERVAL_MS: ${ADMISSION_INTERVAL_MS}
+      ADMISSION_TOKEN_TTL_SECONDS: 600
+    ports:
+      - "3004:3000"
+    depends_on:
+      hold-store:
+        condition: service_healthy
+      catalog:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [flashtix-net]
+
+  # --- Payment Worker (PAY-1 to PAY-5) -----------------------------------------
+  # No public API: consumes payment.requested / refund.requested and calls the legacy
+  # gateway with timeout, retries and a circuit breaker.
+  payment-worker:
+    build:
+      context: .
+      dockerfile: services/payment-worker/Dockerfile
+    environment:
+      PORT: 3000
+      PAYMENT_DB_HOST: payment-db
+      PAYMENT_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      PAYMENT_GATEWAY_URL: http://payment-gateway-mock:8080
+      PAYMENT_GATEWAY_TIMEOUT_MS: 20000
+      PAYMENT_RETRY_DELAYS_MS: ${PAYMENT_RETRY_DELAYS_MS}
+      PAYMENT_CONCURRENCY: 50
+    ports:
+      - "3005:3000"
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      payment-gateway-mock:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 10s
