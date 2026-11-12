@@ -294,6 +294,8 @@ services:
     image: haproxy:2.8-alpine
     volumes:
       - ./infra/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./infra/haproxy/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+    entrypoint: ["/docker-entrypoint.sh"]
     ports:
       - "8000:8000"     # public API (was Kong's port)
       - "8404:8404"     # HAProxy stats UI
@@ -303,7 +305,7 @@ services:
       api-gateway:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
