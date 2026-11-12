@@ -104,11 +104,11 @@ scrape_configs:
   #   static_configs:
   #     - targets: ["redis-hold-store-exporter:9121"]
 
-  # RabbitMQ metrics (via management plugin)
+  # RabbitMQ metrics (via prometheus plugin)
   - job_name: "rabbitmq"
     static_configs:
       - targets: ["rabbitmq:15672"]
-    metrics_path: /api/metrics
+    metrics_path: /metrics
     basic_auth:
       username: "${RABBITMQ_USER}"
       password: "${RABBITMQ_PASSWORD}"
