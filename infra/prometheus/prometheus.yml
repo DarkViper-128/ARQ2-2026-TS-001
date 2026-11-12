@@ -104,6 +104,12 @@ scrape_configs:
   #   static_configs:
   #     - targets: ["redis-hold-store-exporter:9121"]
 
+  # Mock payment gateway metrics
+  - job_name: "payment-gateway-mock"
+    static_configs:
+      - targets: ["payment-gateway-mock:8080"]
+    metrics_path: /metrics
+
   # RabbitMQ metrics (via prometheus plugin)
   - job_name: "rabbitmq"
     static_configs:
