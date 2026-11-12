@@ -287,8 +287,34 @@ services:
       start_period: 40s
     networks: [flashtix-net]
 
-  # --- API Gateway (GW-1 to GW-4) -----------------------------------------------
-  # Single entry point. DB-less: infra/kong/kong.yml is the whole configuration.
+  # --- Load Balancer (HAProxy) ----------------------------------------------------
+  # Single entry point in front of Kong. Terminates external traffic and
+  # load-balances across Kong instances (C4 Level 2: Load Balancer component).
+  load-balancer:
+    image: haproxy:2.8-alpine
+    volumes:
+      - ./infra/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./infra/haproxy/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+    entrypoint: ["/docker-entrypoint.sh"]
+    ports:
+      - "8000:8000"     # public API (was Kong's port)
+      - "8404:8404"     # HAProxy stats UI
+    environment:
+      HAPROXY_STATS_PASSWORD: ${HAPROXY_STATS_PASSWORD:-admin}
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [flashtix-net]
+
+  # --- API Gateway (Kong) ---------------------------------------------------------
+  # Internal gateway: JWT validation, rate limiting, routing, Idempotency-Key.
+  # No longer exposed directly to host; accessed via load-balancer.
   api-gateway:
     image: kong:3.8
     environment:
@@ -301,9 +327,8 @@ services:
       KONG_PROXY_ERROR_LOG: /dev/stderr
     volumes:
       - ./infra/kong/kong.yml:/kong/kong.yml:ro
-    ports:
-      - "8000:8000"     # public API
-      - "8001:8001"     # admin API (read-only in DB-less mode)
+    # Ports no longer exposed to host; load-balancer forwards to api-gateway:8000
+    # Admin API kept internal for potential debugging (not exposed to host)
     depends_on:
       catalog:
         condition: service_healthy

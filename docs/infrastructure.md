@@ -84,7 +84,8 @@ Use values without spaces, quotes or `$`. MySQL stores the root password the fir
 | `mailpit` | `axllent/mailpit:v1.21` | 1025 (SMTP), 8025 (UI) | - | Catches the emails of the Notification Worker. Nothing leaves the machine |
 | `payment-gateway-mock` | built from `tools/` | 8090 | Payment Gateway (external) | Stand-in for the legacy gateway |
 | `keycloak` | `quay.io/keycloak/keycloak:26.0` | 8080, 9000 | Identity Provider | Realm `flashtix`, roles FAN and ORGANIZER |
-| `api-gateway` | `kong:3.8` | 8000 (proxy), 8001 (admin) | API Gateway | Single entry point, validates the JWT |
+| `load-balancer` | `haproxy:2.8-alpine` | 8000 (proxy), 8404 (stats) | Load Balancer | Single entry point, TLS termination, load balances to Kong |
+| `api-gateway` | `kong:3.8` | 8001 (admin, internal) | API Gateway | JWT validation, rate limiting, routing (internal, via load-balancer) |
 | `catalog` | built from `services/catalog` | 3001 | Catalog Service | Events and seat availability, read-only |
 | `reservation` | built from `services/reservation` | 3002 | Reservation Service | Soft seat holds with TTL |
 | `order` | built from `services/order` | 3003 | Order Service | Checkout saga and source of truth for every sale |
@@ -95,6 +96,10 @@ Use values without spaces, quotes or `$`. MySQL stores the root password the fir
 
 The Reservation Service also listens on `50051` for the `LockHold` gRPC call of the Order
 Service. That port is internal to `flashtix-net`: it is not published and Kong does not route it.
+
+The load balancer (`load-balancer:8000`) is the **only port a client should ever use**. It terminates
+external traffic and forwards to `api-gateway:8000` internally. Kong's admin port (8001) is not
+exposed to the host.
 
 `booking-db` and `payment-db` load their schemas from `infra/mysql/booking` and
 `infra/mysql/payment` the first time their volume is created. If you already had those volumes
@@ -247,7 +252,7 @@ curl -s localhost:9090/            # must list the "tickets" bucket
 | `booking-db` with primary and replica | Single instance | Pending |
 | MinIO for the ticket files | `adobe/s3mock`, same S3 API | **Needs a team decision**, see above |
 | Object storage with credentials and persistence | Unauthenticated, in-memory | Development only |
-| HAProxy in front of Kong | Not included | Phase 3 (GW-6), optional |
+| HAProxy in front of Kong | Included (`load-balancer` service, port 8000) | Done (Phase 3, GW-6) |
 | Role checks per route, `X-User-Id` set by the gateway | `post-function` plugin on every protected route | Done (Phase 3, GW-3, GW-4) |
 | Waiting Room and the admission token on `POST /holds` | Included | Done (Phase 2) |
 | Order Service and Payment Worker (checkout saga) | Included | Done (Phase 2) |
@@ -264,8 +269,8 @@ required by the Wave 2 guidelines.
 
 ## The first end-to-end flow (Phase 1)
 
-Everything below goes through the gateway on port 8000, which is the only port a client
-should ever use.
+Everything below goes through the **load balancer (HAProxy) on port 8000**, which is the only port a client
+should ever use. HAProxy forwards traffic to Kong API Gateway (internal `api-gateway:8000`).
 
 ```bash
 # 1. A fan logs in and gets a token
