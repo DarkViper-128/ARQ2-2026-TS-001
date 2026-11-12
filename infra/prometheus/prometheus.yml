@@ -107,7 +107,7 @@ scrape_configs:
   # RabbitMQ metrics (via prometheus plugin)
   - job_name: "rabbitmq"
     static_configs:
-      - targets: ["rabbitmq:15672"]
+      - targets: ["rabbitmq:15692"]
     metrics_path: /metrics
     basic_auth:
       username: "${RABBITMQ_USER}"
