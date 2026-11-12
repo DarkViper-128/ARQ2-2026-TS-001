@@ -141,7 +141,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 16,
     fontWeight: 600,
     cursor: 'pointer',
-    opacity: loading ? 0.7 : 1,
   },
   hint: {
     marginTop: 25,

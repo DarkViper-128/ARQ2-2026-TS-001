@@ -16,7 +16,7 @@ interface Event {
 
 export default function EventSeats() {
   const { eventId } = useParams();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const navigate = useNavigate();
   const [event, setEvent] = useState<Event | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
@@ -60,11 +60,6 @@ export default function EventSeats() {
       const admissionToken = (queueRes as any).admissionToken;
 
       // 2. Create hold
-      const holdRes = await api.post(
-        '/holds',
-        { eventId, seatIds: selected },
-        token,
-      );
       // Need admission token header - re-post with it
       const holdRes2 = await api.post(
         '/holds',

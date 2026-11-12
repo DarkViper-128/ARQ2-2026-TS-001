@@ -8,7 +8,7 @@ import Order from './pages/Order';
 import Tickets from './pages/Tickets';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, token } = useAuth();
+  const { isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }

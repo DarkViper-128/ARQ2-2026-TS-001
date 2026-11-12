@@ -16,7 +16,6 @@ export default function Hold() {
   const [hold, setHold] = useState<Hold | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
 
   useEffect(() => {
     const raw = localStorage.getItem('flashtix_hold');
@@ -79,7 +78,6 @@ export default function Hold() {
         <p style={styles.value}>{new Date(hold.expiresAt).toLocaleString('es-CO')}</p>
       </div>
 
-      {message && <div style={styles.message}>{message}</div>}
       {error && <div style={styles.error}>{error}</div>}
 
       <div style={styles.actions}>

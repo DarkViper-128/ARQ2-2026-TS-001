@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, useAuth } from '../lib/api';
+import { useAuth } from '../lib/api';
 
 export default function Order() {
   const { token } = useAuth();
@@ -145,7 +145,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 16,
     fontWeight: 600,
     cursor: 'pointer',
-    opacity: loading ? 0.7 : 1,
   },
   successCard: {
     padding: 40,
