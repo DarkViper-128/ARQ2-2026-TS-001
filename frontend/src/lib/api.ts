@@ -49,6 +49,18 @@ export const api = {
 
   delete: (path: string, token: string | null = null) =>
     apiRequest(path, { method: 'DELETE' }, token),
+
+  postWithHeaders: (
+    path: string,
+    body: unknown,
+    extraHeaders: Record<string, string>,
+    token: string | null = null,
+  ) =>
+    apiRequest(path, {
+      method: 'POST',
+      headers: { ...extraHeaders },
+      body: JSON.stringify(body),
+    }, token),
 };
 
 export { useAuth };

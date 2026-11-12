@@ -1,15 +1,26 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
-import Catalog from './pages/Catalog';
+import MainLayout from './layout/MainLayout';
+import FanDashboard from './pages/FanDashboard';
+import AdminDashboard from './pages/AdminDashboard';
 import EventSeats from './pages/EventSeats';
 import Hold from './pages/Hold';
 import Order from './pages/Order';
+import Orders from './pages/Orders';
 import Tickets from './pages/Tickets';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+function FanRoute({ children }: { children: React.ReactNode }) {
+  const { user, isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.role === 'ORGANIZER') return <Navigate to="/admin" replace />;
+  return <>{children}</>;
+}
+
+function OrganizerRoute({ children }: { children: React.ReactNode }) {
+  const { user, isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.role !== 'ORGANIZER') return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -19,44 +30,59 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+
           <Route
-            path="/"
             element={
-              <ProtectedRoute>
-                <Catalog />
-              </ProtectedRoute>
+              <MainLayout />
             }
-          />
+          >
+            <Route index element={<FanDashboard />} />
+            <Route path="/" element={<FanDashboard />} />
+            <Route path="/events/:eventId/seats" element={<EventSeats />} />
+            <Route path="/hold" element={<Hold />} />
+            <Route path="/order" element={<Order />} />
+            <Route path="/tickets" element={<Tickets />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route
+              path="/admin"
+              element={
+                <OrganizerRoute>
+                  <AdminDashboard />
+                </OrganizerRoute>
+              }
+            />
+            <Route
+              path="/admin/events"
+              element={
+                <OrganizerRoute>
+                  <AdminDashboard />
+                </OrganizerRoute>
+              }
+            />
+            <Route
+              path="/admin/create"
+              element={
+                <OrganizerRoute>
+                  <AdminDashboard />
+                </OrganizerRoute>
+              }
+            />
+            <Route
+              path="/admin/refunds"
+              element={
+                <OrganizerRoute>
+                  <AdminDashboard />
+                </OrganizerRoute>
+              }
+            />
+          </Route>
+
           <Route
-            path="/events/:eventId/seats"
+            path="/fan"
             element={
-              <ProtectedRoute>
-                <EventSeats />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/hold"
-            element={
-              <ProtectedRoute>
-                <Hold />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/order"
-            element={
-              <ProtectedRoute>
-                <Order />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/tickets"
-            element={
-              <ProtectedRoute>
-                <Tickets />
-              </ProtectedRoute>
+              <FanRoute>
+                <FanDashboard />
+              </FanRoute>
             }
           />
         </Routes>

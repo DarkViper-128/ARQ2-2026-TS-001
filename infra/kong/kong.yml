@@ -71,12 +71,6 @@ routes:
     strip_path: false
     methods: [POST, GET]
     plugins:
-      - name: jwt
-        config:
-          key_claim_name: iss
-          claims_to_verify:
-            - exp
-          run_on_preflight: true
       - name: post-function
         config:
           access:
@@ -107,12 +101,6 @@ routes:
       - /v1/orders
     strip_path: false
     plugins:
-      - name: jwt
-        config:
-          key_claim_name: iss
-          claims_to_verify:
-            - exp
-          run_on_preflight: true
       - name: post-function
         config:
           access:
@@ -125,12 +113,6 @@ routes:
       - /v1/holds
     strip_path: false
     plugins:
-      - name: jwt
-        config:
-          key_claim_name: iss
-          claims_to_verify:
-            - exp
-          run_on_preflight: true
       - name: post-function
         config:
           access:
@@ -144,12 +126,6 @@ routes:
     strip_path: false
     methods: [GET]
     plugins:
-      - name: jwt
-        config:
-          key_claim_name: iss
-          claims_to_verify:
-            - exp
-          run_on_preflight: true
       - name: post-function
         config:
           access:
@@ -164,12 +140,6 @@ routes:
     strip_path: false
     methods: [POST]
     plugins:
-      - name: jwt
-        config:
-          key_claim_name: iss
-          claims_to_verify:
-            - exp
-          run_on_preflight: true
       - name: post-function
         config:
           access:
@@ -203,12 +173,6 @@ routes:
     strip_path: false
     methods: [POST]
     plugins:
-      - name: jwt
-        config:
-          key_claim_name: iss
-          claims_to_verify:
-            - exp
-          run_on_preflight: true
       - name: post-function
         config:
           access:
