@@ -7,7 +7,6 @@ export default function Order() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [order, setOrder] = useState<any>(null);
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,17 +44,12 @@ export default function Order() {
       }
 
       const orderData = await res2.json();
-      setOrder(orderData);
       localStorage.setItem('flashtix_order', JSON.stringify(orderData));
-      setLoading(false);
+      navigate('/payment');
     } catch (err: any) {
       setError(err.message);
       setLoading(false);
     }
-  };
-
-  const handleGoTickets = () => {
-    navigate('/tickets');
   };
 
   return (
@@ -66,45 +60,20 @@ export default function Order() {
 
       <h1 style={styles.title}>Confirmar compra</h1>
 
-      {!order && (
-        <>
-          <form onSubmit={handleCheckout} style={styles.form}>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Método de pago</label>
-              <select style={styles.input}>
-                <option value="tok_visa">Tarjeta de crédito (Visa)</option>
-              </select>
-            </div>
-            <p style={styles.hint}>
-              El pago se procesa de forma asíncrona. Recibirás la confirmación en unos segundos.
-            </p>
-            <button type="submit" disabled={loading} style={styles.payBtn}>
-              {loading ? 'Procesando...' : 'Pagar y confirmar orden'}
-            </button>
-          </form>
-        </>
-      )}
-
-      {order && (
-        <div style={styles.successCard}>
-          <h2 style={styles.successTitle}>✅ Orden confirmada</h2>
-          <p style={styles.successText}>
-            Tu orden <strong>{order.orderId}</strong> ha sido confirmada.
-          </p>
-          <p style={styles.successText}>
-            Asientos: {order.seats?.map((s: any) => s.seatId).join(', ')}
-          </p>
-          <p style={styles.successText}>
-            Total: {order.total?.amount?.toLocaleString('es-CO', {
-              style: 'currency',
-              currency: 'COP',
-            })}
-          </p>
-          <button onClick={handleGoTickets} style={styles.ticketsBtn}>
-            Ver mis boletos
-          </button>
+      <form onSubmit={handleCheckout} style={styles.form}>
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Método de pago</label>
+          <select style={styles.input}>
+            <option value="tok_visa">Tarjeta de crédito (Visa)</option>
+          </select>
         </div>
-      )}
+        <p style={styles.hint}>
+          El pago se procesa de forma asíncrona. Recibirás la confirmación en unos segundos.
+        </p>
+        <button type="submit" disabled={loading} style={styles.payBtn}>
+          {loading ? 'Procesando...' : 'Pagar y confirmar orden'}
+        </button>
+      </form>
 
       {error && <div style={styles.error}>{error}</div>}
     </div>
@@ -138,28 +107,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   payBtn: {
     padding: 12,
-    background: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
-    fontSize: 16,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  successCard: {
-    padding: 40,
-    background: '#f0fdf4',
-    border: '1px solid #bbf7d0',
-    borderRadius: 12,
-    textAlign: 'center',
-    maxWidth: 400,
-    margin: '0 auto',
-  },
-  successTitle: { margin: 0, fontSize: 24, color: '#166534' },
-  successText: { color: '#166534', margin: 12 },
-  ticketsBtn: {
-    marginTop: 20,
-    padding: '10px 24px',
     background: '#2563eb',
     color: '#ffffff',
     border: 'none',

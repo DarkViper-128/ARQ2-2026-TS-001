@@ -23,7 +23,21 @@ interface Order {
   createdAt: string;
 }
 
+interface ErrorEntry {
+  operation: string;
+  message: string;
+  timestamp: string;
+}
+
+interface SuccessStats {
+  eventsCreated: number;
+  eventsPublished: number;
+  ordersConfirmed: number;
+  refundsRequested: number;
+}
+
 const POLL_INTERVAL = 5000;
+const MAX_ERRORS = 10;
 
 export default function AdminDashboard() {
   const { token } = useAuth();
@@ -34,6 +48,26 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [apiErrors, setApiErrors] = useState<Record<string, string>>({});
+  const [recentErrors, setRecentErrors] = useState<ErrorEntry[]>([]);
+  const [successStats, setSuccessStats] = useState<SuccessStats>({
+    eventsCreated: 0,
+    eventsPublished: 0,
+    ordersConfirmed: 0,
+    refundsRequested: 0,
+  });
+
+  const addError = (operation: string, message: string) => {
+    const entry: ErrorEntry = {
+      operation,
+      message,
+      timestamp: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
+    setRecentErrors((prev) => [entry, ...prev].slice(0, MAX_ERRORS));
+  };
+
+  const incStat = (key: keyof SuccessStats) => {
+    setSuccessStats((prev) => ({ ...prev, [key]: prev[key] + 1 }));
+  };
 
   // Crear evento form state
   const [createForm, setCreateForm] = useState({
@@ -67,6 +101,7 @@ export default function AdminDashboard() {
           navigate('/login');
         } else if (!cancelled) {
           setApiErrors((prev) => ({ ...prev, events: err.message || 'Error cargando eventos' }));
+          addError('Cargar eventos', err.message || 'Error cargando eventos');
           setLoading(false);
         }
       }
@@ -86,6 +121,7 @@ export default function AdminDashboard() {
         } else if (!cancelled) {
           // Órdenes pueden no estar disponibles para organizador (401) — no es crítico
           setApiErrors((prev) => ({ ...prev, orders: 'Órdenes no disponibles para este rol' }));
+          addError('Cargar órdenes', 'Órdenes no disponibles para este rol');
         }
       }
     };
@@ -109,10 +145,12 @@ export default function AdminDashboard() {
       await api.post(`/admin/events/${eventId}/publish`, {}, token);
       setSuccess('Evento publicado correctamente');
       setApiErrors((prev) => ({ ...prev, publish: '' }));
+      incStat('eventsPublished');
       const data = await api.get('/events', token);
       setEvents(extractList<Event>(data));
     } catch (err: any) {
       setApiErrors((prev) => ({ ...prev, publish: err.message || 'Error al publicar' }));
+      addError('Publicar evento', err.message || 'Error al publicar');
       setSuccess('');
     }
   };
@@ -127,6 +165,7 @@ export default function AdminDashboard() {
       setEvents(extractList<Event>(data));
     } catch (err: any) {
       setApiErrors((prev) => ({ ...prev, delete: err.message || 'Error al eliminar' }));
+      addError('Eliminar evento', err.message || 'Error al eliminar');
       setSuccess('');
     }
   };
@@ -151,6 +190,7 @@ export default function AdminDashboard() {
       await api.post('/admin/events', body, token);
       setSuccess('Evento creado correctamente');
       setApiErrors((prev) => ({ ...prev, create: '' }));
+      incStat('eventsCreated');
 
       setCreateForm({
         name: '',
@@ -170,7 +210,24 @@ export default function AdminDashboard() {
       setLoading(false);
     } catch (err: any) {
       setApiErrors((prev) => ({ ...prev, create: err.message || 'Error al crear evento' }));
+      addError('Crear evento', err.message || 'Error al crear evento');
       setLoading(false);
+    }
+  };
+
+  const handleRefund = async (orderId: string) => {
+    if (!confirm('¿Estás seguro de que quieres reembolsar esta orden?')) return;
+    try {
+      await api.post(`/admin/orders/${orderId}/refund`, { reason: 'EVENT_CANCELLED' }, token);
+      setSuccess('Reembolso solicitado correctamente');
+      incStat('refundsRequested');
+      const data = await api.get('/orders', token);
+      const list = extractList<Order>(data);
+      setOrders(list);
+    } catch (err: any) {
+      setApiErrors((prev) => ({ ...prev, refund: err.message || 'Error al reembolsar' }));
+      addError('Reembolsar orden', err.message || 'Error al reembolsar');
+      setSuccess('');
     }
   };
 
@@ -224,6 +281,77 @@ export default function AdminDashboard() {
           <div style={styles.statLabel}>Órdenes confirmadas</div>
         </div>
       </div>
+
+      {/* Monitoreo en tiempo real */}
+      <section style={{ ...styles.card, marginTop: 24 }}>
+        <div style={styles.monitorHeader}>
+          <h2 style={styles.sectionTitle}>📈 Monitoreo en Tiempo Real</h2>
+          <p style={styles.hint}>
+            Errores de peticiones del organizador y peticiones completadas con éxito.
+          </p>
+        </div>
+        <div style={styles.monitorColumns}>
+          {/* Columna izquierda: errores recientes */}
+          <section style={styles.monitorPanel}>
+            <h3 style={styles.monitorTitle}>❌ Errores Recientes</h3>
+            {recentErrors.length === 0 ? (
+              <p style={styles.empty}>Sin errores en las últimas peticiones.</p>
+            ) : (
+              <div style={styles.errorList}>
+                {recentErrors.map((err, i) => (
+                  <div key={i} style={styles.errorRow}>
+                    <div style={styles.errorOp}>{err.operation}</div>
+                    <div style={styles.errorMsg}>{err.message}</div>
+                    <div style={styles.errorTime}>{err.timestamp}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Columna derecha: éxitos (gráfico de barras) */}
+          <section style={styles.monitorPanel}>
+            <h3 style={styles.monitorTitle}>✅ Peticiones Completadas con Éxito</h3>
+            <div style={styles.statRow}>
+              <span style={styles.statLabel}>Eventos creados</span>
+              <span style={styles.statValue}>{successStats.eventsCreated}</span>
+            </div>
+            <div style={styles.statRow}>
+              <span style={styles.statLabel}>Eventos publicados</span>
+              <span style={styles.statValue}>{successStats.eventsPublished}</span>
+            </div>
+            <div style={styles.statRow}>
+              <span style={styles.statLabel}>Órdenes confirmadas</span>
+              <span style={styles.statValue}>{confirmedOrders.length}</span>
+            </div>
+            <div style={styles.statRow}>
+              <span style={styles.statLabel}>Reembolsos solicitados</span>
+              <span style={styles.statValue}>{successStats.refundsRequested}</span>
+            </div>
+            <div style={styles.barChart}>
+              {[
+                { label: 'Eventos creados', value: successStats.eventsCreated },
+                { label: 'Eventos publicados', value: successStats.eventsPublished },
+                { label: 'Órdenes confirmadas', value: confirmedOrders.length },
+                { label: 'Reembolsos', value: successStats.refundsRequested },
+              ].map((item) => (
+                <div key={item.label} style={styles.barItem}>
+                  <div style={styles.barLabel}>{item.label}</div>
+                  <div style={styles.barTrack}>
+                    <div
+                      style={{
+                        ...styles.barFill,
+                        width: `${Math.max(0, Math.min(100, (item.value / Math.max(1, ...Object.values(successStats), confirmedOrders.length))) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <div style={styles.barValue}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </section>
 
       <div style={styles.twoColumns}>
         {/* Columna izquierda: Crear evento */}
@@ -393,6 +521,15 @@ export default function AdminDashboard() {
                   </div>
                   <div style={styles.orderActions}>
                     <span style={getStatusBadgeStyle(order.status)}>{order.status}</span>
+                    {order.status === 'CONFIRMED' && (
+                      <button
+                        onClick={() => handleRefund(order.orderId)}
+                        style={styles.refundBtn}
+                        disabled={loading}
+                      >
+                        Reembolsar
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -585,5 +722,111 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
+  },
+  refundBtn: {
+    padding: '6px 14px',
+    background: '#d97706',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  monitorHeader: {
+    marginBottom: 16,
+  },
+  monitorColumns: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 20,
+  },
+  monitorPanel: {
+    background: '#ffffff',
+    borderRadius: 12,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    padding: 20,
+  },
+  monitorTitle: {
+    margin: '0 0 12px 0',
+    fontSize: 16,
+    color: '#111827',
+    fontWeight: 600,
+  },
+  errorList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    maxHeight: 300,
+    overflowY: 'auto',
+  },
+  errorRow: {
+    display: 'flex',
+    gap: 10,
+    padding: '8px 10px',
+    background: '#fef2f2',
+    borderRadius: 6,
+    borderLeft: '4px solid #dc2626',
+    fontSize: 13,
+  },
+  errorOp: {
+    fontWeight: 600,
+    color: '#991b1b',
+    minWidth: 130,
+    fontSize: 12,
+  },
+  errorMsg: {
+    flex: 1,
+    color: '#7f1d1d',
+    fontSize: 13,
+  },
+  errorTime: {
+    fontSize: 11,
+    color: '#9ca3af',
+    fontFamily: 'monospace',
+  },
+  statRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    padding: '8px 0',
+    borderBottom: '1px solid #f3f4f6',
+    fontSize: 14,
+  },
+  barChart: {
+    marginTop: 16,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+  },
+  barItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
+  barLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: 600,
+  },
+  barTrack: {
+    height: 20,
+    background: '#e5e7eb',
+    borderRadius: 10,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  barFill: {
+    height: '100%',
+    background: '#2563eb',
+    borderRadius: 10,
+    transition: 'width 0.3s ease',
+  },
+  barValue: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: '#111827',
+    marginTop: 2,
   },
 };

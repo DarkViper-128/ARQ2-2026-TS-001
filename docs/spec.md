@@ -418,8 +418,12 @@ Scripts:
 ### Metrics (Prometheus)
 All services expose `/metrics` (Prometheus format) with custom metrics:
 - `http_requests_total` — request count by method, path, status
-- `orders_total` — orders by status
-- `payments_total` — payments by status
+- `orders_total` — orders by status (`state` label: PENDING, CONFIRMED, FAILED, CANCELLED, REFUND_PENDING)
+- `payments_total` — payments by outcome (`outcome` label: succeeded/failed; `reason` label for failures)
+- `circuit_breaker_state` — payment gateway circuit breaker (gauge: 0=closed, 1=open, 2=half-open)
+- `payment_gateway_duration_seconds` — duration of each gateway call (histogram, `result` label: ok/declined/timeout/error)
+- `gateway_charges_total` — charges through the mock payment gateway (counter, in payment-gateway-mock)
+- `gateway_charge_duration_seconds` — duration of each mock gateway charge (histogram, in payment-gateway-mock)
 - `rabbitmq_consumer_messages_total` — message consumption by queue
 
 Prometheus scrapes all targets every 15s with 30-day retention. All 12 targets confirmed UP.
