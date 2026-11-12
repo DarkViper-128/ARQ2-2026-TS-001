@@ -631,7 +631,7 @@ services:
     ports:
       - "9100:9100"
     volumes:
-      - /:/host:ro,rslave
+      - /:/host:ro
     networks: [flashtix-net]
 
   cadvisor:
