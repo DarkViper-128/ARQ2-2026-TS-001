@@ -1,0 +1,114 @@
+# FlashTix Prometheus Configuration (Phase 4)
+# Scrapes metrics from all services, infrastructure, and exporters.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: "flashtix-local"
+    environment: "development"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Node Exporter - host metrics
+  - job_name: "node-exporter"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # cAdvisor - container metrics
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # Kong API Gateway metrics
+  - job_name: "kong"
+    static_configs:
+      - targets: ["api-gateway:8001"]
+    metrics_path: /metrics
+
+  # Catalog Service
+  - job_name: "catalog"
+    static_configs:
+      - targets: ["catalog:3000"]
+    metrics_path: /metrics
+
+  # Reservation Service
+  - job_name: "reservation"
+    static_configs:
+      - targets: ["reservation:3000"]
+    metrics_path: /metrics
+
+  # Waiting Room Service
+  - job_name: "waiting-room"
+    static_configs:
+      - targets: ["waiting-room:3000"]
+    metrics_path: /metrics
+
+  # Order Service
+  - job_name: "order"
+    static_configs:
+      - targets: ["order:3000"]
+    metrics_path: /metrics
+
+  # Payment Worker
+  - job_name: "payment-worker"
+    static_configs:
+      - targets: ["payment-worker:3000"]
+    metrics_path: /metrics
+
+  # Ticket Service
+  - job_name: "ticket"
+    static_configs:
+      - targets: ["ticket:3000"]
+    metrics_path: /metrics
+
+  # Notification Worker
+  - job_name: "notification"
+    static_configs:
+      - targets: ["notification:3000"]
+    metrics_path: /metrics
+
+  # MySQL Exporters (if enabled) - commented out as not deployed by default
+  # - job_name: "mysql-catalog"
+  #   static_configs:
+  #     - targets: ["mysql-catalog-exporter:9104"]
+  # - job_name: "mysql-booking"
+  #   static_configs:
+  #     - targets: ["mysql-booking-exporter:9104"]
+  # - job_name: "mysql-payment"
+  #   static_configs:
+  #     - targets: ["mysql-payment-exporter:9104"]
+  # - job_name: "mysql-ticket"
+  #   static_configs:
+  #     - targets: ["mysql-ticket-exporter:9104"]
+  # - job_name: "mysql-notification"
+  #   static_configs:
+  #     - targets: ["mysql-notification-exporter:9104"]
+
+  # Redis Exporters (if enabled) - commented out as not deployed by default
+  # - job_name: "redis-catalog-cache"
+  #   static_configs:
+  #     - targets: ["redis-catalog-exporter:9121"]
+  # - job_name: "redis-hold-store"
+  #   static_configs:
+  #     - targets: ["redis-hold-store-exporter:9121"]
+
+  # RabbitMQ metrics (via management plugin)
+  - job_name: "rabbitmq"
+    static_configs:
+      - targets: ["rabbitmq:15672"]
+    metrics_path: /api/metrics
+    basic_auth:
+      username: "${RABBITMQ_USER}"
+      password: "${RABBITMQ_PASSWORD}"

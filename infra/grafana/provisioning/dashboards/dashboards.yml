@@ -1,0 +1,15 @@
+# FlashTix Grafana Dashboard Provisioning (Phase 4)
+# Auto-loads dashboards from the dashboards directory.
+
+apiVersion: 1
+
+providers:
+  - name: "FlashTix Dashboards"
+    orgId: 1
+    folder: "FlashTix"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
