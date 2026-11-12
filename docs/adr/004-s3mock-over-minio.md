@@ -1,56 +1,56 @@
-# ADR 004: Uso de s3mock en lugar de MinIO para almacenamiento de objetos S3-compatible
+# ADR 004: Use s3mock instead of MinIO for S3-compatible object storage
 
-## Estado
-Aceptado
+## Status
+Accepted
 
-## Contexto
-El proyecto FlashTix requiere almacenamiento de objetos compatible con S3 para guardar los PDFs de los tickets (Ticket Service). La especificación original (spec.md) y los diagramas C4 mencionaban **MinIO** como la solución de almacenamiento.
+## Context
+The FlashTix project requires S3-compatible object storage to store ticket PDFs (Ticket Service). The original specification (spec.md) and C4 diagrams mentioned **MinIO** as the storage solution.
 
-Sin embargo, al implementar la infraestructura con Docker Compose, se encontró que **MinIO ya no publica imágenes community oficiales que se puedan descargar sin credenciales** (requiere login en Docker Hub / quay.io para `minio/minio`). Esto complica el despliegue en entornos de desarrollo y CI/CD donde no se quieren gestionar credenciales de registro de contenedores.
+However, when implementing the infrastructure with Docker Compose, it was found that **MinIO no longer publishes official community images that can be downloaded without credentials** (requires login on Docker Hub / quay.io for `minio/minio`). This complicates deployment in development and CI/CD environments where container registry credentials are not desired.
 
-## Decisión
-Usar **`adobe/s3mock:3.12.0`** como almacenamiento S3-compatible para desarrollo y testing, en lugar de MinIO.
+## Decision
+Use **`adobe/s3mock:3.12.0`** as S3-compatible storage for development and testing, instead of MinIO.
 
-- **Imagen**: `adobe/s3mock:3.12.0` (pública, sin credenciales)
-- **Puerto**: 9090 (API S3)
-- **Nombre del servicio**: `ticket-files` (neutro, implementation-agnostic)
-- **Inicialización**: Contenedor `ticket-files-init` crea el bucket al arrancar
+- **Image**: `adobe/s3mock:3.12.0` (public, no credentials required)
+- **Port**: 9090 (S3 API)
+- **Service name**: `ticket-files` (neutral, implementation-agnostic)
+- **Initialization**: `ticket-files-init` container creates the bucket on startup
 
-Para producción, el servicio `ticket-files` se puede reemplazar por:
-- `minio/minio` (si se configuran credenciales de registry)
-- AWS S3 real (cambiando variables de entorno: `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, credenciales)
-- Azure Blob Storage / Google Cloud Storage (con adaptador S3)
+For production, the `ticket-files` service can be replaced by:
+- `minio/minio` (if registry credentials are configured)
+- Real AWS S3 (changing environment variables: `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, credentials)
+- Azure Blob Storage / Google Cloud Storage (with S3 adapter)
 
-## Consecuencias
+## Consequences
 
-### Positivas
-- **Sin credenciales de registry**: La imagen es pública en Docker Hub
-- **Despliegue simple**: `docker compose up` funciona sin configuración previa
-- **Compatible con S3 API**: Los SDKs de AWS (JavaScript, Python, etc.) funcionan sin cambios
-- **Neutralidad**: El nombre del servicio `ticket-files` no ata a MinIO; migración a S3 real es solo cambio de imagen/env vars
-- **Rápido para desarrollo**: s3mock es ligero y arranca en segundos
+### Positive
+- **No registry credentials**: The image is public on Docker Hub
+- **Simple deployment**: `docker compose up` works without prior configuration
+- **S3 API compatible**: AWS SDKs (JavaScript, Python, etc.) work without changes
+- **Neutrality**: The service name `ticket-files` is not tied to MinIO; migration to real S3 is just an image/env vars change
+- **Fast for development**: s3mock is lightweight and starts in seconds
 
-### Negativas
-- **Solo desarrollo/testing**: s3mock no es apto para producción (no persiste, no tiene replicación, no tiene UI de gestión)
-- **Funcionalidad limitada**: No soporta todas las features de S3 (versioning, lifecycle policies, etc.)
-- **Diferencia con producción**: El comportamiento puede variar ligeramente vs MinIO/S3 real
+### Negative
+- **Development/testing only**: s3mock is not suitable for production (no persistence, no replication, no management UI)
+- **Limited functionality**: Does not support all S3 features (versioning, lifecycle policies, etc.)
+- **Difference from production**: Behavior may vary slightly vs MinIO/real S3
 
-## Alternativas consideradas
+## Alternatives considered
 
-| Opción | Ventajas | Desventajas | Decisión |
-|--------|----------|-------------|----------|
-| **MinIO** (`minio/minio`) | Completo, producción-ready, UI | Requiere credenciales Docker Hub desde 2024 | ❌ Rechazado |
-| **LocalStack** | Muchos servicios AWS mock | Pesado, lento, licencia compleja | ❌ Rechazado |
-| **s3mock** (adobe/s3mock) | Ligero, público, S3 API básico | Solo dev/testing | ✅ **Elegido** |
-| **MinIO Bitnami** (`bitnami/minio`) | Imagen pública mantenida | Añade dependencia de terceros | ⚠️ Considerado, pero s3mock es más simple |
+| Option | Pros | Cons | Decision |
+|--------|------|------|----------|
+| **MinIO** (`minio/minio`) | Complete, production-ready, UI | Requires Docker Hub credentials since 2024 | ❌ Rejected |
+| **LocalStack** | Many AWS services mocked | Heavy, slow, complex licensing | ❌ Rejected |
+| **s3mock** (adobe/s3mock) | Lightweight, public, basic S3 API | Dev/testing only | ✅ **Chosen** |
+| **MinIO Bitnami** (`bitnami/minio`) | Publicly maintained image | Adds third-party dependency | ⚠️ Considered, but s3mock is simpler |
 
-## Implementación
-- `docker-compose.yml`: Servicio `ticket-files` con `adobe/s3mock:3.12.0`
-- `ticket-files-init`: Contenedor Node.js que crea el bucket via HTTP PUT
-- Variables de entorno: `TICKET_BUCKET`, `S3_ENDPOINT=http://ticket-files:9090`, `S3_PUBLIC_ENDPOINT`
-- Ticket Service y Notification Worker usan SDK S3 estándar (`@aws-sdk/client-s3`)
+## Implementation
+- `docker-compose.yml`: `ticket-files` service with `adobe/s3mock:3.12.0`
+- `ticket-files-init`: Node.js container that creates the bucket via HTTP PUT
+- Environment variables: `TICKET_BUCKET`, `S3_ENDPOINT=http://ticket-files:9090`, `S3_PUBLIC_ENDPOINT`
+- Ticket Service and Notification Worker use standard S3 SDK (`@aws-sdk/client-s3`)
 
-## Referencias
-- [adobe/s3mock en Docker Hub](https://hub.docker.com/r/adobe/s3mock)
-- [MinIO Docker Hub - requiere login](https://hub.docker.com/r/minio/minio)
-- Spec.md actualizado (sección 1, tabla de servicios)
+## References
+- [adobe/s3mock on Docker Hub](https://hub.docker.com/r/adobe/s3mock)
+- [MinIO Docker Hub - requires login](https://hub.docker.com/r/minio/minio)
+- Updated spec.md (section 1, services table)
