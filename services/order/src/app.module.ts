@@ -4,6 +4,7 @@ import { createPool } from 'mysql2/promise';
 import { CatalogClient } from './clients/catalog.client';
 import { ReservationClient } from './clients/reservation.client';
 import { HealthController } from './health.controller';
+import { AdminOrdersController } from './orders/admin-orders.controller';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
 import { OutboxRelay } from './outbox/outbox.relay';
@@ -16,7 +17,7 @@ import { EVENT_PUBLISHER, MYSQL } from './tokens';
  * consumers (ORD-5 to ORD-7).
  */
 @Module({
-  controllers: [OrdersController, HealthController],
+  controllers: [OrdersController, AdminOrdersController, HealthController],
   providers: [
     OrdersService,
     OutboxRelay,
