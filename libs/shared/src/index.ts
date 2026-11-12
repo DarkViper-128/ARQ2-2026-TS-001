@@ -8,3 +8,4 @@ export * from './events/consumer';
 export * from './events/processed-events';
 export * from './auth/admission-token';
 export * from './auth/ticket-qr';
+export * from './metrics/prometheus';
