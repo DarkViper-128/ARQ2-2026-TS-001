@@ -56,6 +56,79 @@ export class AdminService {
     return { eventId, status: 'DRAFT', name: event.name };
   }
 
+  /**
+   * `PATCH /admin/events/{eventId}`: updates the editable fields of a DRAFT event
+   * (name and ticket price) in a single transaction. Returns the updated event id.
+   */
+  async updateEvent(eventId: string, body: unknown): Promise<{ eventId: string; name: string }> {
+    if (typeof body !== 'object' || body === null) {
+      throw new AppError('VALIDATION_ERROR', 'The request body must be a JSON object');
+    }
+    const input = body as Record<string, unknown>;
+
+    let name: string | undefined;
+    if (input.name !== undefined) {
+      if (typeof input.name !== 'string' || input.name.trim().length === 0 || input.name.trim().length > 160) {
+        throw new AppError('VALIDATION_ERROR', 'name is required (1 to 160 characters)');
+      }
+      name = input.name.trim();
+    }
+
+    let price: number | undefined;
+    if (input.price !== undefined) {
+      let amount: unknown = input.price;
+      const categories = input.priceCategories as unknown[];
+      if (Array.isArray(categories) && categories.length > 0) {
+        const first = categories[0] as Record<string, unknown> | undefined;
+        const pc = first?.price as Record<string, unknown> | undefined;
+        amount = pc?.amount;
+      }
+      if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount <= 0) {
+        throw new AppError('VALIDATION_ERROR', 'price must be a positive integer in minor units');
+      }
+      price = amount;
+    }
+
+    if (name === undefined && price === undefined) {
+      throw new AppError('VALIDATION_ERROR', 'At least one of name or price must be provided');
+    }
+
+    let currentName = '';
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const [rows] = await connection.query<RowDataPacket[]>(
+        'SELECT event_id, name FROM events WHERE event_id = ?',
+        [eventId],
+      );
+      if (rows.length === 0) {
+        throw new AppError('EVENT_NOT_FOUND', `Event ${eventId} does not exist`);
+      }
+      currentName = String((rows[0] as { name: string }).name);
+
+      if (name !== undefined) {
+        await connection.execute('UPDATE events SET name = ? WHERE event_id = ?', [name, eventId]);
+      }
+      if (price !== undefined) {
+        await connection.execute(
+          'UPDATE price_categories SET price_amount = ? WHERE event_id = ? AND category = ?',
+          [price, eventId, 'General'],
+        );
+      }
+
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback().catch(() => undefined);
+      throw error;
+    } finally {
+      connection.release();
+    }
+
+    this.logger.log(`event ${eventId} updated (name=${name ?? '-'}, price=${price ?? '-'})`);
+    return { eventId, name: name ?? currentName };
+  }
+
   private async assertNew(connection: PoolConnection, event: NewEvent): Promise<void> {
     const [rows] = await connection.query<RowDataPacket[]>(
       'SELECT event_id FROM events WHERE name = ? AND artist = ? AND starts_at = ? LIMIT 1 FOR UPDATE',

@@ -78,6 +78,12 @@ export default function EventSeats() {
       localStorage.setItem('flashtix_admission_token', admissionToken);
       navigate('/hold');
     } catch (err: any) {
+      if (err.message === 'UNAUTHENTICATED') {
+        localStorage.removeItem('flashtix_token');
+        localStorage.removeItem('flashtix_user');
+        navigate('/login');
+        return;
+      }
       setError(err.message || 'No se pudo crear la reserva');
     } finally {
       setLoading(false);
