@@ -7,6 +7,12 @@ import { TicketsService } from './tickets.service';
 export class TicketsController {
   constructor(private readonly tickets: TicketsService) {}
 
+  /** spec.md section 4, `GET /tickets`. Lists the tickets of the authenticated fan. */
+  @Get()
+  readAll(@Req() request: Request) {
+    return this.tickets.getAll(currentUserId(request));
+  }
+
   /** spec.md section 4, `GET /tickets/{ticketId}`. Auth: FAN (holder). */
   @Get(':ticketId')
   read(@Req() request: Request, @Param('ticketId') ticketId: string) {

@@ -43,6 +43,16 @@ export default function EventSeats() {
     );
   };
 
+  /** WR-3: joins the virtual queue and polls until the fan is ADMITTED. */
+  const waitForAdmission = async (ticketId: string): Promise<string> => {
+    for (let i = 0; i < 30; i++) {
+      const turn = await api.get(`/events/${eventId}/queue/${ticketId}`, token);
+      if ((turn as any).status === 'ADMITTED') return (turn as any).admissionToken;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    throw new Error('La cola virtual no te admitió a tiempo. Intenta de nuevo.');
+  };
+
   const handleHold = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selected.length === 0 || selected.length > 6) {
@@ -51,27 +61,33 @@ export default function EventSeats() {
     }
 
     try {
-      // 1. Join queue (if not already admitted)
-      const queueRes = await api.post(
-        `/events/${eventId}/queue`,
-        {},
-        token,
-      );
-      const admissionToken = (queueRes as any).admissionToken;
+      setLoading(true);
+      setError('');
+      setMessage('');
 
-      // 2. Create hold
-      // Need admission token header - re-post with it
-      const holdRes2 = await api.post(
+      // 1. Join the virtual queue
+      const queueRes = await api.post(`/events/${eventId}/queue`, {}, token);
+      const ticketId = (queueRes as any).queueTicketId;
+      if (!ticketId) throw new Error('No se pudo unir a la cola virtual');
+
+      // 2. Wait until ADMITTED to get the admission token
+      const admissionToken = await waitForAdmission(ticketId);
+
+      // 3. Create the hold WITH the admission token (the gateway requires it)
+      const holdRes = await api.postWithHeaders(
         '/holds',
         { eventId, seatIds: selected },
+        { 'X-Admission-Token': admissionToken },
         token,
       );
 
-      localStorage.setItem('flashtix_hold', JSON.stringify(holdRes2));
+      localStorage.setItem('flashtix_hold', JSON.stringify(holdRes));
       localStorage.setItem('flashtix_admission_token', admissionToken);
       navigate('/hold');
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'No se pudo crear la reserva');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -132,6 +148,7 @@ export default function EventSeats() {
       </div>
 
       {message && <div style={styles.message}>{message}</div>}
+      {error && <div style={styles.error}>{error}</div>}
 
       <div style={styles.summary}>
         <div>

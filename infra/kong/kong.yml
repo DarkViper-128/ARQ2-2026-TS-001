@@ -165,6 +165,7 @@ routes:
   - name: tickets
     service: ticket
     paths:
+      - ~/v1/tickets$
       - ~/v1/tickets/[^/]+$
     strip_path: false
     methods: [GET]
