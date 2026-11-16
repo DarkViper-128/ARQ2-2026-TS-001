@@ -51,6 +51,12 @@ export class OrdersController {
     return result.body;
   }
 
+  /** Lists the orders of the authenticated fan, newest first. Backs the "my orders" screen. */
+  @Get()
+  async list(@Req() request: Request) {
+    return this.orders.listForUser(currentUserId(request));
+  }
+
   @Get(':orderId')
   async read(@Req() request: Request, @Param('orderId') orderId: string) {
     return this.orders.get(orderId, currentUserId(request), currentUserRoles(request).includes('ORGANIZER'));

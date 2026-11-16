@@ -35,6 +35,16 @@ export class HoldsController {
     return view(record);
   }
 
+  /**
+   * Lists the holds of the authenticated fan, newest expiry last.
+   * The "my reservation" screen uses it after a reload, when it has no holdId at hand.
+   */
+  @Get()
+  async list(@Req() request: Request) {
+    const records = await this.holds.listHoldsForUser(currentUserId(request));
+    return records.map(view);
+  }
+
   @Get(':holdId')
   async read(@Req() request: Request, @Param('holdId') holdId: string) {
     currentUserId(request);

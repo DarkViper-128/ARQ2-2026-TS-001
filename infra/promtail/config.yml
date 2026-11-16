@@ -12,28 +12,10 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  - job_name: "flashtix-containers"
-    static_labels:
-      cluster: "flashtix-local"
-      environment: "development"
-      __path__: /var/lib/docker/containers/*/*log
-    pipeline_stages:
-      - docker: {}
-      - labels:
-          service:
-          container_name:
-      - match:
-          selector: '{service=~".+"}'
-          stages:
-            - regex:
-                expression: '^.*\/(?P<service_name>[^\/]+)\/.*$'
-            - labels:
-                service_name:
-
+  # Discovers containers of this compose project through the Docker socket. A second job
+  # reading /var/lib/docker/containers/*/*log was removed: it scraped EVERY container on
+  # the host, including unrelated ones whose old timestamps Loki rejects with HTTP 400.
   - job_name: "flashtix-services"
-    static_labels:
-      cluster: "flashtix-local"
-      environment: "development"
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 10s
@@ -41,6 +23,10 @@ scrape_configs:
           - name: label
             values: ["com.docker.compose.project=flashtix"]
     relabel_configs:
+      - target_label: "cluster"
+        replacement: "flashtix-local"
+      - target_label: "environment"
+        replacement: "development"
       - source_labels: ["__meta_docker_container_name"]
         target_label: "container"
       - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]

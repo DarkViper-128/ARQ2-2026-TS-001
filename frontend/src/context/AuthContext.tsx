@@ -4,7 +4,7 @@ interface AuthContextType {
   token: string | null;
   user: { username: string; role: string } | null;
   isAuthenticated: boolean;
-  login: (token: string | null, username: string, role: string) => void;
+  login: (token: string, username: string, role: string) => void;
   logout: () => void;
 }
 
@@ -20,14 +20,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return raw ? JSON.parse(raw) : null;
   });
 
-  const login = useCallback((token: string | null, username: string, role: string) => {
+  const login = useCallback((token: string, username: string, role: string) => {
     setToken(token);
     setUser({ username, role });
-    if (token) {
-      localStorage.setItem('flashtix_token', token);
-    } else {
-      localStorage.removeItem('flashtix_token');
-    }
+    localStorage.setItem('flashtix_token', token);
     localStorage.setItem('flashtix_user', JSON.stringify({ username, role }));
   }, []);
 
@@ -39,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider value={{ token, user, isAuthenticated: !!token && !!user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

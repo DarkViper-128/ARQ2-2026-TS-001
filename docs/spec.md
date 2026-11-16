@@ -128,6 +128,14 @@ Login uses the standard OIDC endpoints of Keycloak (`/realms/flashtix/protocol/o
 - **Responses:** `201 Created` · `403 INVALID_ADMISSION_TOKEN` · `409 SEAT_UNAVAILABLE` (lists `unavailableSeatIds`) · `422 TOO_MANY_SEATS` · `503` (Redis down)
 - **Example `201`:** `{ "holdId": "c71e...", "seatIds": ["A-12-07", "A-12-08"], "status": "ACTIVE", "expiresAt": "2026-10-20T15:16:00Z" }`
 
+### `GET /holds` - Reservation (F3)
+- **Auth:** FAN
+- **Behavior:** lists the fan's own holds that are still alive, soonest expiry first. Reads a
+  per-fan index in `hold-store` (`holds:user:{userId}`), so it never scans Redis. Entries whose
+  hold already expired, was released or was consumed by an order are dropped on read.
+- **Responses:** `200 OK` with an array (empty when the fan has no live hold) · `401`
+- **Example `200`:** `[{ "holdId": "c71e...", "eventId": "3f0c...", "seatIds": ["B-09-01"], "status": "ACTIVE", "expiresAt": "2026-10-20T15:16:00Z" }]`
+
 ### `DELETE /holds/{holdId}` - Reservation (F3)
 - **Auth:** FAN (owner)
 - **Responses:** `204 No Content` seats released · `404 HOLD_NOT_FOUND` · `409 HOLD_LOCKED` (already in an order)
@@ -150,10 +158,23 @@ Login uses the standard OIDC endpoints of Keycloak (`/realms/flashtix/protocol/o
   "statusUrl": "/v1/orders/e4a7..." }
 ```
 
+### `GET /orders` - Order (F4)
+- **Auth:** FAN
+- **Behavior:** the authenticated fan's own orders, newest first, capped at 50. Seats are loaded
+  with one extra query for the whole page, not one per order. An ORGANIZER reading somebody
+  else's order uses `GET /orders/{orderId}` instead; this route is always scoped to the caller.
+- **Responses:** `200 OK` with an array (empty when the fan never bought) · `401`
+- **Example `200`:** `[{ "orderId": "e4a7...", "eventId": "3f0c...", "status": "CONFIRMED", "seats": [{ "seatId": "A-12-07", "category": "VIP", "price": { "amount": 45000000, "currency": "COP" } }], "total": { "amount": 45000000, "currency": "COP" }, "createdAt": "2026-10-20T15:07:19Z" }]`
+
 ### `GET /orders/{orderId}` - Order (F4)
 - **Auth:** FAN (owner) or ORGANIZER
 - **Responses:** `200 OK` · `404 ORDER_NOT_FOUND`. The same state is also pushed live with SSE at `GET /orders/{orderId}/events`.
 - **Example `200`:** `{ "orderId": "e4a7...", "status": "CONFIRMED", "seats": [{ "seatId": "A-12-07" }, { "seatId": "A-12-08" }], "version": 2 }`
+
+### `GET /tickets` - Ticket (F5)
+- **Auth:** FAN
+- **Behavior:** every ticket issued to the authenticated fan, across all orders.
+- **Responses:** `200 OK` with an array · `401`
 
 ### `GET /tickets/{ticketId}` - Ticket (F5)
 - **Auth:** FAN (holder)

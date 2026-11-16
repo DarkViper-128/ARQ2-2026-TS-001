@@ -44,6 +44,15 @@ const DEFAULT_LOCK_SECONDS = 300;
 
 export const HOLDS_INDEX_KEY = 'holds:by-expiry';
 
+/**
+ * Per-fan index of holds, scored by expiry, so `GET /holds` never has to scan Redis.
+ * It is written on create and cleaned lazily on read: entries whose hold key is already
+ * gone (released, consumed or expired) are dropped the next time the fan asks.
+ */
+export function userHoldsKey(userId: string): string {
+  return `holds:user:${userId}`;
+}
+
 @Injectable()
 export class HoldsService {
   private readonly logger = new Logger(HoldsService.name);
@@ -118,6 +127,7 @@ export class HoldsService {
       HOLDS_INDEX_KEY,
       this.refKey(holdId),
       String(record.expiresAtMs),
+      userHoldsKey(userId),
     )) as string[];
 
     if (conflicts.length > 0) {
@@ -141,6 +151,38 @@ export class HoldsService {
 
     this.logger.log(`hold ${holdId} created for ${record.seatIds.length} seat(s)`);
     return record;
+  }
+
+  /**
+   * Holds of one fan that are still alive. Backs `GET /holds`.
+   *
+   * Reads the per-fan index instead of scanning keys, drops anything already expired by
+   * score, and removes index entries whose record is gone so the set heals itself.
+   */
+  async listHoldsForUser(userId: string): Promise<HoldRecord[]> {
+    const indexKey = userHoldsKey(userId);
+    await this.redis.zremrangebyscore(indexKey, '-inf', Date.now());
+
+    const holdIds = await this.redis.zrange(indexKey, 0, -1);
+    if (holdIds.length === 0) return [];
+
+    const raws = await this.redis.mget(...holdIds.map((id) => this.holdKey(id)));
+    const stale: string[] = [];
+    const records: HoldRecord[] = [];
+
+    raws.forEach((raw, i) => {
+      if (!raw) {
+        stale.push(holdIds[i]!);
+        return;
+      }
+      const record = JSON.parse(raw) as HoldRecord;
+      // Defensive: the index is per fan, but never serve somebody else's hold.
+      if (record.userId === userId) records.push(record);
+    });
+
+    if (stale.length > 0) await this.redis.zrem(indexKey, ...stale);
+
+    return records.sort((a, b) => a.expiresAtMs - b.expiresAtMs);
   }
 
   async getHold(holdId: string): Promise<HoldRecord> {
