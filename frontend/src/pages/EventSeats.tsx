@@ -38,8 +38,27 @@ export default function EventSeats() {
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [hoveredSeat, setHoveredSeat] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+
+  /**
+   * The access token lives 15 minutes, so a fan who browses for a while and then buys
+   * gets a 401. Every other screen clears the session and sends them to the login form;
+   * this one used to print "UNAUTHENTICATED" and leave them stuck.
+   */
+  const handleApiError = useCallback(
+    (err: Error) => {
+      if (err.message === 'UNAUTHENTICATED') {
+        localStorage.removeItem('flashtix_token');
+        localStorage.removeItem('flashtix_user');
+        navigate('/login');
+        return;
+      }
+      setError(err.message || 'No se pudo completar la operación');
+    },
+    [navigate],
+  );
 
   useEffect(() => {
     if (!eventId) return;
@@ -59,7 +78,8 @@ export default function EventSeats() {
           ),
         );
       })
-      .catch((err: Error) => setError(err.message));
+      .catch(handleApiError)
+      .finally(() => setLoadingData(false));
   }, [eventId, token]);
 
   const toggleSeat = (seatId: string) => {
@@ -120,7 +140,7 @@ export default function EventSeats() {
       // 4. Pasarela de pago (Order -> Payment)
       navigate('/order');
     } catch (err: any) {
-      setError(err.message || 'No se pudo crear la reserva');
+      handleApiError(err instanceof Error ? err : new Error('No se pudo crear la reserva'));
     } finally {
       setLoading(false);
     }
@@ -133,6 +153,7 @@ export default function EventSeats() {
       </div>
     );
   }
+  if (loadingData) return <div style={styles.loader}>Cargando mapa de asientos…</div>;
   if (error) return <div style={styles.error}>Error: {error}</div>;
   if (!event) return <div style={styles.empty}>Evento no encontrado</div>;
 
