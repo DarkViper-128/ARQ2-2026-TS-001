@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, useAuth } from '../lib/api';
 import { extractList } from '../lib/apiHelper';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 interface Event {
   eventId: string;
@@ -114,9 +116,9 @@ export default function FanDashboard() {
                     })}
                   </p>
                 </div>
-                <button onClick={() => handleBuyTicket(event.eventId)} style={styles.viewBtn}>
+                <Button onClick={() => handleBuyTicket(event.eventId)} variant="primary" style={styles.viewBtn}>
                   Crear Boleto
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -127,22 +129,22 @@ export default function FanDashboard() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 32, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: '#0f172a', color: '#f1f5f9' },
+  container: { padding: 32, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: colors.background, color: colors.text },
   loader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     height: '60vh',
     fontSize: 18,
-    color: '#94a3b8',
+    color: colors.muted,
   },
   error: {
     padding: 24,
-    background: '#450a0a',
-    color: '#fca5a5',
+    background: colors.errorBg,
+    color: colors.error,
     borderRadius: 8,
     margin: 24,
-    border: '1px solid #7f1d1d',
+    border: `1px solid ${colors.errorBorder}`,
   },
   header: {
     display: 'flex',
@@ -152,26 +154,27 @@ const styles: Record<string, React.CSSProperties> = {
     paddingRight: 20,
   },
   welcome: {},
-  title: { margin: '0 0 4px 0', fontSize: 28, color: '#ffffff' },
-  subtitle: { margin: 0, color: '#94a3b8', fontSize: 14 },
+  title: { margin: '0 0 4px 0', fontSize: 28, color: colors.text },
+  subtitle: { margin: 0, color: colors.muted, fontSize: 14 },
   roleChip: {
     padding: '8px 16px',
-    background: '#1e3a8a',
-    color: '#bfdbfe',
+    background: colors.primary,
+    color: '#ffffff',
     borderRadius: 20,
     fontSize: 13,
     fontWeight: 600,
-    border: '1px solid #3b82f6',
+    border: `1px solid ${colors.border}`,
   },
+  roleText: { color: '#ffffff', fontSize: 13, fontWeight: 600 },
   errorBanner: {
     marginBottom: 16,
     padding: 12,
-    background: '#7f1d1d',
-    color: '#fecaca',
+    background: colors.errorBg,
+    color: colors.error,
     borderRadius: 6,
     fontSize: 14,
     fontWeight: 500,
-    border: '1px solid #b91c1c',
+    border: `1px solid ${colors.errorBorder}`,
   },
   statsGrid: {
     display: 'grid',
@@ -181,17 +184,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
   statCard: {
     padding: 24,
-    background: '#1e293b',
+    background: colors.surface,
     borderRadius: 12,
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
     display: 'flex',
     alignItems: 'center',
     gap: 18,
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
   },
   statIcon: { fontSize: 32 },
-  statValue: { fontSize: 28, fontWeight: 700, color: '#ffffff', margin: '0 0 4px 0' },
-  statLabel: { margin: 0, fontSize: 13, color: '#94a3b8' },
+  statValue: { fontSize: 28, fontWeight: 700, color: colors.text, margin: '0 0 4px 0' },
+  statLabel: { margin: 0, fontSize: 13, color: colors.muted },
   section: { marginBottom: 32 },
   sectionHeader: {
     display: 'flex',
@@ -199,24 +202,24 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     marginBottom: 16,
   },
-  sectionTitle: { margin: 0, fontSize: 20, color: '#ffffff' },
+  sectionTitle: { margin: 0, fontSize: 20, color: colors.text },
   syncBadge: {
     padding: '4px 10px',
-    background: '#064e3b',
-    color: '#6ee7b7',
+    background: colors.accent,
+    color: '#15042D',
     borderRadius: 20,
     fontSize: 11,
     fontWeight: 600,
     textTransform: 'uppercase',
-    border: '1px solid #10b981',
+    border: `1px solid ${colors.border}`,
   },
   empty: {
     padding: 48,
     textAlign: 'center',
-    color: '#94a3b8',
-    background: '#1e293b',
+    color: colors.muted,
+    background: colors.surface,
     borderRadius: 12,
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
   },
   eventGrid: {
     display: 'grid',
@@ -224,32 +227,26 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 24,
   },
   eventCard: {
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
     borderRadius: 16,
     padding: 24,
-    background: '#1e293b',
+    background: colors.surface,
     display: 'flex',
     flexDirection: 'column',
     gap: 16,
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
   },
   eventInfo: { marginBottom: 8 },
-  eventName: { margin: '0 0 8px 0', fontSize: 20, color: '#ffffff', fontWeight: 600 },
-  eventArtist: { margin: '0 0 8px 0', color: '#94a3b8', fontSize: 15 },
-  eventVenue: { margin: '0 0 8px 0', color: '#cbd5e1', fontSize: 14 },
-  eventDate: { margin: 0, color: '#64748b', fontSize: 13 },
+  eventName: { margin: '0 0 8px 0', fontSize: 20, color: colors.text, fontWeight: 600 },
+  eventArtist: { margin: '0 0 8px 0', color: colors.muted, fontSize: 15 },
+  eventVenue: { margin: '0 0 8px 0', color: colors.text, fontSize: 14 },
+  eventDate: { margin: 0, color: colors.muted, fontSize: 13 },
   viewBtn: {
     marginTop: 12,
     width: '100%',
     padding: 14,
-    background: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 8,
     fontSize: 16,
     fontWeight: 600,
-    cursor: 'pointer',
-    boxShadow: '0 2px 4px rgba(37, 99, 235, 0.3)',
   },
   ticketGrid: {
     display: 'grid',
@@ -258,8 +255,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   ticketCard: {
     padding: 20,
-    background: '#1e293b',
-    border: '2px solid #2563eb',
+    background: colors.surface,
+    border: `2px solid ${colors.primary}`,
     borderRadius: 12,
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
   },
@@ -272,38 +269,39 @@ const styles: Record<string, React.CSSProperties> = {
   ticketBadge: {
     fontSize: 12,
     fontWeight: 700,
-    color: '#2563eb',
+    color: colors.primary,
     textTransform: 'uppercase',
   },
   seatId: {
     padding: '4px 10px',
-    background: '#1e3a8a',
-    color: '#bfdbfe',
+    background: colors.primary,
+    color: '#ffffff',
     borderRadius: 20,
     fontSize: 12,
     fontWeight: 600,
+    border: `1px solid ${colors.border}`,
   },
   qrArea: {
     height: 80,
-    background: '#0f172a',
+    background: colors.background,
     borderRadius: 8,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
   },
   qrPlaceholder: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: colors.muted,
     textAlign: 'center',
     maxWidth: '100%',
     wordBreak: 'break-all',
   },
   ticketInfo: { display: 'flex', flexDirection: 'column', gap: 6 },
-  ticketText: { margin: 0, fontSize: 14, color: '#cbd5e1' },
+  ticketText: { margin: 0, fontSize: 14, color: colors.text },
   downloadLink: {
-    color: '#2563eb',
+    color: colors.primary,
     textDecoration: 'none',
     fontWeight: 600,
     cursor: 'pointer',

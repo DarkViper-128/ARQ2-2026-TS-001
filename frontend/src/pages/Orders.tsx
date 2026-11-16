@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, useAuth } from '../lib/api';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 interface Order {
   orderId: string;
@@ -45,7 +47,7 @@ export default function Orders() {
   return (
     <div style={styles.container}>
       <nav style={styles.nav}>
-        <button onClick={handleBack} style={styles.backBtn}>← Inicio</button>
+        <Button type="button" onClick={handleBack} variant="ghost" style={styles.backBtn}>← Inicio</Button>
       </nav>
 
       <h1 style={styles.title}>Mis Órdenes</h1>
@@ -54,7 +56,7 @@ export default function Orders() {
         <div style={styles.empty}>
           <h2>No tienes órdenes</h2>
           <p>Compra entradas para tus eventos favoritos.</p>
-          <button onClick={handleBack} style={styles.backBtn}>Ir al catálogo</button>
+          <Button onClick={handleBack} variant="outline" style={styles.backBtn}>Ir al catálogo</Button>
         </div>
       ) : (
         <div style={styles.orderGrid}>
@@ -95,40 +97,39 @@ export default function Orders() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 24, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: '#0f172a', color: '#f1f5f9' },
+  container: { padding: 24, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: colors.background, color: colors.text },
   nav: { marginBottom: 32 },
   backBtn: {
-    background: 'none',
-    border: '1px solid #334155',
-    padding: '8px 16px',
-    borderRadius: 6,
-    cursor: 'pointer',
+    background: 'transparent',
+    border: 'none',
+    color: colors.muted,
     fontSize: 14,
-    color: '#94a3b8',
+    cursor: 'pointer',
+    padding: 0,
   },
-  title: { fontSize: 28, color: '#ffffff', marginBottom: 24 },
+  title: { fontSize: 28, color: colors.text, marginBottom: 24 },
   loader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     height: '60vh',
     fontSize: 18,
-    color: '#94a3b8',
+    color: colors.muted,
   },
   error: {
     padding: 24,
-    background: '#450a0a',
-    color: '#fca5a5',
+    background: colors.errorBg,
+    color: colors.error,
     borderRadius: 8,
     margin: 24,
-    border: '1px solid #7f1d1d',
+    border: `1px solid ${colors.errorBorder}`,
   },
   empty: {
     textAlign: 'center',
     padding: 60,
-    background: '#1e293b',
+    background: colors.surface,
     borderRadius: 12,
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
   },
   orderGrid: {
     display: 'grid',
@@ -137,8 +138,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   orderCard: {
     padding: 24,
-    background: '#1e293b',
-    border: '1px solid #334155',
+    background: colors.surface,
+    border: `1px solid ${colors.border}`,
     borderRadius: 12,
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
   },
@@ -151,14 +152,14 @@ const styles: Record<string, React.CSSProperties> = {
   orderIdLabel: {
     fontSize: 12,
     fontWeight: 600,
-    color: '#94a3b8',
+    color: colors.muted,
     textTransform: 'uppercase',
   },
   orderIdValue: {
     fontSize: 16,
     fontWeight: 700,
-    color: '#ffffff',
+    color: colors.text,
   },
   orderInfo: { display: 'flex', flexDirection: 'column', gap: 8 },
-  orderText: { margin: 0, fontSize: 14, color: '#cbd5e1' },
+  orderText: { margin: 0, fontSize: 14, color: colors.muted },
 };

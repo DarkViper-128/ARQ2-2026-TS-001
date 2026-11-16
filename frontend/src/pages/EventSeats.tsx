@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, useAuth } from '../lib/api';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 interface Event {
   eventId: string;
@@ -30,6 +32,7 @@ export default function EventSeats() {
   const [event, setEvent] = useState<Event | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [hoveredSeat, setHoveredSeat] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -130,7 +133,7 @@ export default function EventSeats() {
   return (
     <div style={styles.container}>
       <nav style={styles.nav}>
-        <button onClick={() => navigate('/')} style={styles.backBtn}>← Eventos</button>
+        <Button type="button" onClick={() => navigate('/')} variant="ghost" style={styles.backBtn}>← Eventos</Button>
         <h1 style={styles.title}>{event.name}</h1>
       </nav>
 
@@ -160,15 +163,20 @@ export default function EventSeats() {
             {seats.map((seat) => {
               const selected = isSelected(seat.id);
               const taken = seat.status === 'taken';
+              const hover = !taken && !loading && hoveredSeat === seat.id;
               return (
                 <button
                   key={seat.id}
                   onClick={taken ? undefined : () => toggleSeat(seat.id)}
+                  onMouseEnter={taken || loading ? undefined : () => setHoveredSeat(seat.id)}
+                  onMouseLeave={taken || loading ? undefined : () => setHoveredSeat(null)}
                   disabled={taken || loading}
                   style={{
                     ...styles.seatBtn,
                     ...(selected ? styles.seatSelected : {}),
                     ...(taken ? styles.seatTaken : {}),
+                    ...(hover ? { transform: 'translateY(-1px)', opacity: 0.92 } : {}),
+                    transition: 'transform 0.15s, opacity 0.15s',
                   }}
                   title={`Asiento ${seat.number}`}
                 >
@@ -195,13 +203,14 @@ export default function EventSeats() {
         {message && <div style={styles.message}>{message}</div>}
         {error && <div style={styles.error}>{error}</div>}
 
-        <button
+        <Button
           onClick={handleBuy}
           disabled={loading || selectedSeats.length === 0 || selectedSeats.length > MAX_TICKETS}
+          variant="primary"
           style={styles.buyBtn}
         >
           {loading ? 'Procesando…' : 'Continuar al pago'}
-        </button>
+        </Button>
         <p style={styles.hint}>
           Máximo {MAX_TICKETS} boletas por compra. Haz clic en un asiento para seleccionarlo o deseleccionarlo.
         </p>
@@ -211,7 +220,7 @@ export default function EventSeats() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 32, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', maxWidth: 1200, margin: '0 auto', background: '#0f172a', color: '#f1f5f9' },
+  container: { padding: 32, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', maxWidth: 1200, margin: '0 auto', background: colors.background, color: colors.text },
   nav: {
     display: 'flex',
     alignItems: 'center',
@@ -219,52 +228,51 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 32,
   },
   backBtn: {
-    background: 'none',
-    border: '1px solid #334155',
-    padding: '10px 20px',
-    borderRadius: 8,
-    cursor: 'pointer',
+    background: 'transparent',
+    border: 'none',
+    color: colors.muted,
     fontSize: 15,
     fontWeight: 600,
-    color: '#94a3b8',
+    cursor: 'pointer',
+    padding: 0,
   },
-  title: { margin: 0, fontSize: 28, color: '#ffffff' },
+  title: { margin: 0, fontSize: 28, color: colors.text },
   eventInfo: {
     marginBottom: 24,
     padding: 16,
-    background: '#0f172a',
+    background: colors.background,
     borderRadius: 10,
-    color: '#94a3b8',
+    color: colors.muted,
     fontSize: 14,
   },
   card: {
     padding: 40,
-    background: '#1e293b',
-    border: '1px solid #334155',
+    background: colors.surface,
+    border: `1px solid ${colors.border}`,
     borderRadius: 16,
     boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
   },
   sectionTitle: {
     margin: '0 0 16px 0',
     fontSize: 20,
-    color: '#ffffff',
+    color: colors.text,
     fontWeight: 700,
   },
   availableText: {
     margin: '0 0 24px 0',
     fontSize: 16,
-    color: '#cbd5e1',
+    color: colors.muted,
   },
   priceBox: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 0',
-    borderBottom: '1px solid #334155',
+    borderBottom: `1px solid ${colors.border}`,
     marginBottom: 24,
   },
-  priceLabel: { fontSize: 16, color: '#94a3b8' },
-  priceValue: { fontSize: 20, fontWeight: 700, color: '#ffffff' },
+  priceLabel: { fontSize: 16, color: colors.muted },
+  priceValue: { fontSize: 20, fontWeight: 700, color: colors.text },
   seatMapWrapper: {
     display: 'flex',
     flexDirection: 'column',
@@ -274,14 +282,14 @@ const styles: Record<string, React.CSSProperties> = {
   stageLabel: {
     marginBottom: 16,
     padding: '6px 16px',
-    background: '#334155',
-    color: '#94a3b8',
+    background: colors.surface,
+    color: colors.muted,
     borderRadius: 20,
     fontSize: 12,
     fontWeight: 600,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    border: '1px solid #475569',
+    border: `1px solid ${colors.border}`,
   },
   seatMap: {
     display: 'grid',
@@ -293,27 +301,26 @@ const styles: Record<string, React.CSSProperties> = {
   seatBtn: {
     width: 40,
     height: 40,
-    background: '#1e293b',
-    border: '1px solid #334155',
+    background: colors.surface,
+    border: `1px solid ${colors.border}`,
     borderRadius: 8,
-    color: '#cbd5e1',
+    color: colors.muted,
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'all 0.2s ease',
   },
   seatSelected: {
-    background: '#2563eb',
-    borderColor: '#2563eb',
+    background: colors.primary,
+    borderColor: colors.primary,
     color: '#ffffff',
   },
   seatTaken: {
-    background: '#475569',
-    borderColor: '#64748b',
-    color: '#94a3b8',
+    background: colors.muted,
+    borderColor: colors.muted,
+    color: '#6b7280',
     cursor: 'not-allowed',
   },
   legend: {
@@ -328,44 +335,39 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 0',
-    borderBottom: '1px solid #334155',
+    borderBottom: `1px solid ${colors.border}`,
     marginBottom: 28,
   },
-  totalLabel: { fontSize: 16, color: '#94a3b8' },
-  totalValue: { fontSize: 22, fontWeight: 800, color: '#ffffff' },
+  totalLabel: { fontSize: 16, color: colors.muted },
+  totalValue: { fontSize: 22, fontWeight: 800, color: colors.text },
   message: {
     marginBottom: 16,
     padding: 12,
-    background: '#7f1d1d',
-    color: '#fecaca',
+    background: colors.errorBg,
+    color: colors.error,
     borderRadius: 6,
     fontSize: 14,
-    border: '1px solid #b91c1c',
+    border: `1px solid ${colors.errorBorder}`,
   },
   error: {
     marginBottom: 16,
     padding: 12,
-    background: '#7f1d1d',
-    color: '#fecaca',
+    background: colors.errorBg,
+    color: colors.error,
     borderRadius: 6,
     fontSize: 14,
-    border: '1px solid #b91c1c',
+    border: `1px solid ${colors.errorBorder}`,
   },
   buyBtn: {
     width: '100%',
     padding: '16px 24px',
-    background: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 10,
     fontSize: 17,
     fontWeight: 600,
-    cursor: 'pointer',
   },
   hint: {
     margin: 0,
     fontSize: 13,
-    color: '#94a3b8',
+    color: colors.muted,
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -374,7 +376,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '60vh',
-    color: '#94a3b8',
+    color: colors.muted,
     fontSize: 18,
   },
   empty: {
@@ -382,7 +384,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '60vh',
-    color: '#94a3b8',
+    color: colors.muted,
     fontSize: 18,
   },
 };
@@ -393,8 +395,8 @@ function getLegendItemStyle(selected: boolean, taken: boolean): React.CSSPropert
     alignItems: 'center',
     gap: 6,
     fontSize: 13,
-    color: '#94a3b8',
-    ...(selected ? { color: '#2563eb' } : {}),
-    ...(taken ? { color: '#64748b' } : {}),
+    color: colors.muted,
+    ...(selected ? { color: colors.primary } : {}),
+    ...(taken ? { color: colors.muted } : {}),
   };
 }

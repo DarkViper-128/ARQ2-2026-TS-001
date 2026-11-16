@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, useAuth } from '../lib/api';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 interface Order {
   orderId: string;
@@ -104,9 +106,9 @@ export default function Payment() {
     return (
       <div style={styles.error}>
         <p>{error}</p>
-        <button onClick={handleBack} style={styles.secondaryBtn}>
+        <Button onClick={handleBack} variant="outline" style={styles.secondaryBtn}>
           Volver a mis órdenes
-        </button>
+        </Button>
       </div>
     );
   }
@@ -115,9 +117,9 @@ export default function Payment() {
       <div style={styles.empty}>
         <h2>No hay orden de pago</h2>
         <p>No se encontró una orden reciente para mostrar el pago.</p>
-        <button onClick={handleBack} style={styles.secondaryBtn}>
+        <Button onClick={handleBack} variant="outline" style={styles.secondaryBtn}>
           Ir a mis órdenes
-        </button>
+        </Button>
       </div>
     );
   }
@@ -128,7 +130,7 @@ export default function Payment() {
   return (
     <div style={styles.container}>
       <nav style={styles.nav}>
-        <button onClick={handleBack} style={styles.backBtn}>← Mis órdenes</button>
+        <Button type="button" onClick={handleBack} variant="ghost" style={styles.backBtn}>← Mis órdenes</Button>
       </nav>
 
       <h1 style={styles.title}>Estado del Pago</h1>
@@ -180,15 +182,15 @@ export default function Payment() {
 
         <div style={styles.actions}>
           {order.status === 'CONFIRMED' && (
-            <button onClick={() => navigate('/tickets')} style={styles.primaryBtn}>
+            <Button onClick={() => navigate('/tickets')} variant="primary" style={styles.primaryBtn}>
               Ver mis boletos
-            </button>
+            </Button>
           )}
           {order.status === 'FAILED' && (
             <>
-              <button onClick={handleRetry} style={styles.secondaryBtn}>
+              <Button onClick={handleRetry} variant="outline" style={styles.secondaryBtn}>
                 Reintentar compra
-              </button>
+              </Button>
               <p style={styles.retryHint}>
                 El pago se procesa de forma asíncrona. Si falló, puedes crear una orden nueva desde aquí.
               </p>
@@ -212,45 +214,44 @@ export default function Payment() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 24, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: '#0f172a', color: '#f1f5f9' },
+  container: { padding: 24, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: colors.background, color: colors.text },
   nav: { marginBottom: 32 },
   backBtn: {
-    background: 'none',
-    border: '1px solid #334155',
-    padding: '8px 16px',
-    borderRadius: 6,
-    cursor: 'pointer',
+    background: 'transparent',
+    border: 'none',
+    color: colors.muted,
     fontSize: 14,
-    color: '#94a3b8',
+    cursor: 'pointer',
+    padding: 0,
   },
-  title: { fontSize: 28, color: '#ffffff', marginBottom: 24 },
+  title: { fontSize: 28, color: colors.text, marginBottom: 24 },
   loader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     height: '60vh',
     fontSize: 18,
-    color: '#94a3b8',
+    color: colors.muted,
   },
   error: {
     padding: 24,
-    background: '#450a0a',
-    color: '#fca5a5',
+    background: colors.errorBg,
+    color: colors.error,
     borderRadius: 8,
     margin: 24,
-    border: '1px solid #7f1d1d',
+    border: `1px solid ${colors.errorBorder}`,
   },
   empty: {
     textAlign: 'center',
     padding: 60,
-    background: '#1e293b',
+    background: colors.surface,
     borderRadius: 12,
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
   },
   orderCard: {
     padding: 32,
-    background: '#1e293b',
-    border: '1px solid #334155',
+    background: colors.surface,
+    border: `1px solid ${colors.border}`,
     borderRadius: 12,
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
     maxWidth: 520,
@@ -265,16 +266,16 @@ const styles: Record<string, React.CSSProperties> = {
   orderIdLabel: {
     fontSize: 12,
     fontWeight: 600,
-    color: '#94a3b8',
+    color: colors.muted,
     textTransform: 'uppercase',
   },
   orderIdValue: {
     fontSize: 18,
     fontWeight: 700,
-    color: '#ffffff',
+    color: colors.text,
   },
   statusRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 },
-  statusLabel: { fontSize: 14, color: '#94a3b8' },
+  statusLabel: { fontSize: 14, color: colors.muted },
   statusBadge: {
     padding: '4px 12px',
     borderRadius: 20,
@@ -282,51 +283,41 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    background: '#0f172a',
-    border: '1px solid #334155',
-    color: '#cbd5e1',
+    background: colors.background,
+    border: `1px solid ${colors.border}`,
+    color: colors.muted,
   },
   orderInfo: { display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 },
-  orderText: { margin: 0, fontSize: 14, color: '#cbd5e1' },
+  orderText: { margin: 0, fontSize: 14, color: colors.muted },
   failureReason: {
     margin: 0,
     fontSize: 13,
-    color: '#fca5a5',
-    background: '#450a0a',
+    color: colors.error,
+    background: colors.errorBg,
     padding: 8,
     borderRadius: 6,
-    border: '1px solid #7f1d1d',
+    border: `1px solid ${colors.errorBorder}`,
   },
   actions: { display: 'flex', gap: 12, marginBottom: 20 },
   primaryBtn: {
     padding: '10px 24px',
-    background: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
     fontSize: 16,
     fontWeight: 600,
-    cursor: 'pointer',
   },
   secondaryBtn: {
     padding: '10px 24px',
-    background: '#1e293b',
-    color: '#2563eb',
-    border: '1px solid #2563eb',
-    borderRadius: 6,
     fontSize: 16,
     fontWeight: 600,
-    cursor: 'pointer',
   },
   retryHint: {
     margin: 0,
     fontSize: 13,
-    color: '#94a3b8',
+    color: colors.muted,
   },
   note: {
     margin: 0,
     fontSize: 13,
-    color: '#94a3b8',
+    color: colors.muted,
     textAlign: 'center',
   },
 };

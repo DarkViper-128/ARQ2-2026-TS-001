@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 const API_BASE = '/v1';
 
@@ -251,221 +253,223 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const statusColor = (status: string) => {
+  const statusColor = (status: string): React.CSSProperties => {
     switch (status) {
-      case 'PUBLISHED': return 'bg-green-900/30 text-green-400';
-      case 'ON_SALE': return 'bg-blue-900/30 text-blue-400';
-      case 'DRAFT': return 'bg-yellow-900/30 text-yellow-400';
-      case 'CANCELLED': return 'bg-red-900/30 text-red-400';
-      default: return 'bg-slate-800 text-slate-300';
+      case 'PUBLISHED': return { background: colors.accent, color: '#15042D', border: `1px solid ${colors.border}` };
+      case 'ON_SALE': return { background: colors.primary, color: '#ffffff', border: 'none' };
+      case 'DRAFT': return { background: colors.surface, color: colors.text, border: `1px solid ${colors.border}` };
+      case 'CANCELLED': return { background: colors.errorBg, color: colors.error, border: `1px solid ${colors.errorBorder}` };
+      default: return { background: colors.surface, color: colors.muted, border: `1px solid ${colors.border}` };
     }
   };
 
-  const orderStatusColor = (status: string) => {
+  const orderStatusColor = (status: string): React.CSSProperties => {
     switch (status) {
-      case 'CONFIRMED': return 'bg-green-900/30 text-green-400';
-      case 'PENDING': return 'bg-yellow-900/30 text-yellow-400';
-      case 'FAILED': return 'bg-red-900/30 text-red-400';
-      case 'CANCELLED': return 'bg-slate-800 text-slate-300';
-      case 'REFUND_PENDING': return 'bg-orange-900/30 text-orange-400';
-      case 'REFUNDED': return 'bg-blue-900/30 text-blue-400';
-      default: return 'bg-slate-800 text-slate-300';
+      case 'CONFIRMED': return { background: colors.accent, color: '#15042D', border: `1px solid ${colors.border}` };
+      case 'PENDING': return { background: colors.surface, color: colors.text, border: `1px solid ${colors.border}` };
+      case 'FAILED': return { background: colors.errorBg, color: colors.error, border: `1px solid ${colors.errorBorder}` };
+      case 'CANCELLED': return { background: colors.surface, color: colors.muted, border: `1px solid ${colors.border}` };
+      case 'REFUND_PENDING': return { background: colors.surface, color: colors.text, border: `1px solid ${colors.border}` };
+      case 'REFUNDED': return { background: colors.primary, color: '#ffffff', border: 'none' };
+      default: return { background: colors.surface, color: colors.muted, border: `1px solid ${colors.border}` };
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 p-4 md:p-6 max-w-[1400px] mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+    <div style={styles.root}>
+      <div style={styles.headerBar}>
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-100">Panel Organizador</h1>
-          <p className="text-slate-400">Gestiona tus eventos, ordenes y monitorea la plataforma</p>
+          <h1 style={styles.title}>Panel Organizador</h1>
+          <p style={styles.subtitle}>Gestiona tus eventos, ordenes y monitorea la plataforma</p>
         </div>
-        <button
+        <Button
+          type="button"
+          variant="danger"
           onClick={() => {
             localStorage.removeItem('flashtix_token');
             window.location.href = '/';
           }}
-          className="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition"
+          style={styles.logoutBtn}
         >
           Cerrar sesion
-        </button>
+        </Button>
       </div>
 
       {message.text && (
-        <div className={`mb-4 p-4 rounded-lg border ${
-          message.type === 'success' ? 'bg-green-900/20 border-green-500/30 text-green-400' : 'bg-red-900/20 border-red-500/30 text-red-400'
-        }`}>
+        <div style={{ ...styles.messageBanner, ...(message.type === 'success' ? styles.messageSuccess : styles.messageError) }}>
           {message.text}
         </div>
       )}
 
-      <div className="flex border-b border-b-slate-700 mb-6">
-        <button
+      <div style={styles.tabBar}>
+        <Button
+          type="button"
+          variant="outline"
           onClick={() => {
             setActiveTab('events');
             setShowCreateForm(false);
           }}
-          className={`px-6 py-4 border-b-2 font-medium transition ${
-            activeTab === 'events' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
+          style={{ ...styles.tabBtn, ...(activeTab === 'events' ? styles.tabBtnActive : {}) }}
         >
           Todos los Eventos
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
           onClick={() => {
             setActiveTab('my-events');
             setShowCreateForm(false);
           }}
-          className={`px-6 py-4 border-b-2 font-medium transition ${
-            activeTab === 'my-events' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
+          style={{ ...styles.tabBtn, ...(activeTab === 'my-events' ? styles.tabBtnActive : {}) }}
         >
           Mis Eventos
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
           onClick={() => {
             setActiveTab('orders');
             setShowCreateForm(false);
           }}
-          className={`px-6 py-4 border-b-2 font-medium transition ${
-            activeTab === 'orders' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
+          style={{ ...styles.tabBtn, ...(activeTab === 'orders' ? styles.tabBtnActive : {}) }}
         >
           Ordenes
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
           onClick={() => {
             setActiveTab('monitoring');
             setShowCreateForm(false);
           }}
-          className={`px-6 py-4 border-b-2 font-medium transition ${
-            activeTab === 'monitoring' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
+          style={{ ...styles.tabBtn, ...(activeTab === 'monitoring' ? styles.tabBtnActive : {}) }}
         >
           Monitoreo
-        </button>
+        </Button>
       </div>
 
       {activeTab === 'events' && (
         <div>
-          {/* Boton para mostrar/ocultar el formulario de crear evento */}
-          <button
+          <Button
+            type="button"
+            variant="primary"
             onClick={() => setShowCreateForm(!showCreateForm)}
-            className="mb-4 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition flex items-center gap-2"
+            style={styles.createEventBtn}
           >
             {showCreateForm ? 'Ocultar formulario' : '+'} Crear Evento
-          </button>
+          </Button>
 
           {showCreateForm && (
-            <div className="bg-slate-800 p-6 rounded-xl shadow mb-6 border border-slate-700">
-              <h2 className="text-xl font-semibold mb-4">Crear Evento</h2>
-              <form onSubmit={handleCreateEvent} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Nombre del evento</label>
+            <div style={styles.createFormCard}>
+              <h2 style={styles.formTitle}>Crear Evento</h2>
+              <form onSubmit={handleCreateEvent} style={styles.createForm}>
+                <div style={styles.formFull}>
+                  <label style={styles.formLabel}>Nombre del evento</label>
                   <input
-                    className="w-full px-4 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-900 text-slate-100"
+                    style={styles.formInput}
                     placeholder="Ej. Concierto Rock 2026"
                     value={createForm.name}
                     onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
                     required
                   />
                 </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Artista</label>
+                <div style={styles.formFull}>
+                  <label style={styles.formLabel}>Artista</label>
                   <input
-                    className="w-full px-4 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-900 text-slate-100"
+                    style={styles.formInput}
                     placeholder="Ej. The Headliners"
                     value={createForm.artist}
                     onChange={(e) => setCreateForm({ ...createForm, artist: e.target.value })}
                     required
                   />
                 </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Descripcion</label>
+                <div style={styles.formFull}>
+                  <label style={styles.formLabel}>Descripcion</label>
                   <input
-                    className="w-full px-4 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-900 text-slate-100"
+                    style={styles.formInput}
                     placeholder="Descripcion del evento"
                     value={createForm.description}
                     onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Boletas disponibles</label>
+                <div style={styles.formHalf}>
+                  <label style={styles.formLabel}>Boletas disponibles</label>
                   <input
                     type="number"
-                    className="w-full px-4 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-900 text-slate-100"
+                    style={styles.formInput}
                     placeholder="Ej. 200"
                     value={createForm.totalSeats}
                     onChange={(e) => setCreateForm({ ...createForm, totalSeats: e.target.value })}
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Costo por boleta (COP)</label>
+                <div style={styles.formHalf}>
+                  <label style={styles.formLabel}>Costo por boleta (COP)</label>
                   <input
                     type="number"
-                    className="w-full px-4 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-900 text-slate-100"
+                    style={styles.formInput}
                     placeholder="Ej. 45000"
                     value={createForm.price}
                     onChange={(e) => setCreateForm({ ...createForm, price: e.target.value })}
                     required
                   />
                 </div>
-                <button
+                <Button
                   type="submit"
                   disabled={creating || loading}
-                  className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white rounded-lg font-semibold text-lg hover:bg-blue-700 disabled:opacity-50 transition"
+                  variant="primary"
+                  style={styles.createSubmitBtn}
                 >
                   {creating ? 'Creando...' : 'Crear Evento'}
-                </button>
+                </Button>
               </form>
             </div>
           )}
 
-          <div className="bg-slate-800 rounded-xl shadow border border-slate-700 overflow-hidden">
-            <div className="p-6 border-b border-slate-700">
-              <h2 className="text-lg font-semibold text-slate-100">Eventos del Sistema</h2>
+          <div style={styles.sectionCard}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>Eventos del Sistema</h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-slate-800">
-                  <tr>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Nombre</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Descripcion</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Boletas</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Precio</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Estado</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Acciones</th>
+            <div style={styles.tableWrapper}>
+              <table style={styles.table}>
+                <thead style={styles.tableHead}>
+                  <tr style={styles.tableRow}>
+                    <th style={styles.tableCell}>Nombre</th>
+                    <th style={styles.tableCell}>Descripcion</th>
+                    <th style={styles.tableCell}>Boletas</th>
+                    <th style={styles.tableCell}>Precio</th>
+                    <th style={styles.tableCell}>Estado</th>
+                    <th style={styles.tableCell}>Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-700">
+                <tbody>
                   {events.map((event) => (
-                    <tr key={event.event_id} className="hover:bg-slate-800">
-                      <td className="px-6 py-4 font-medium">{event.name}</td>
-                      <td className="px-6 py-4 text-sm text-slate-400 max-w-xs truncate">{event.description || '—'}</td>
-                      <td className="px-6 py-4">{event.total_seats}</td>
-                      <td className="px-6 py-4">${event.price_amount.toLocaleString()} COP</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${statusColor(event.status)}`}>
-                          {event.status}
-                        </span>
+                    <tr key={event.event_id} style={styles.tableRow}>
+                      <td style={styles.tableCell}>{event.name}</td>
+                      <td style={{ ...styles.tableCell, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.description || '—'}</td>
+                      <td style={styles.tableCell}>{event.total_seats}</td>
+                      <td style={styles.tableCell}>${event.price_amount.toLocaleString()} COP</td>
+                      <td style={styles.tableCell}>
+                        <span style={{ ...styles.badge, ...statusColor(event.status) }}>{event.status}</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td style={styles.tableCell}>
                         {event.status === 'DRAFT' && (
-                          <button
+                          <Button
+                            type="button"
                             onClick={() => handlePublish(event.event_id)}
                             disabled={loading}
-                            className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50"
+                            variant="primary"
+                            style={styles.tableBtn}
                           >
                             Publicar
-                          </button>
+                          </Button>
                         )}
                       </td>
                     </tr>
                   ))}
                   {events.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-slate-400">
+                      <td colSpan={6} style={{ ...styles.tableCell, padding: 32, textAlign: 'center', color: colors.muted }}>
                         No hay eventos creados aun.
                       </td>
                     </tr>
@@ -479,81 +483,72 @@ const AdminDashboard: React.FC = () => {
 
       {activeTab === 'my-events' && (
         <div>
-          <div className="bg-slate-800 rounded-xl shadow border border-slate-700 overflow-hidden">
-            <div className="p-6 border-b border-slate-700">
-              <h2 className="text-lg font-semibold text-slate-100">Mis Eventos</h2>
+          <div style={styles.sectionCard}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>Mis Eventos</h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-slate-800">
-                  <tr>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Nombre</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Descripcion</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Boletas</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Precio</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Estado</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Acciones</th>
+            <div style={styles.tableWrapper}>
+              <table style={styles.table}>
+                <thead style={styles.tableHead}>
+                  <tr style={styles.tableRow}>
+                    <th style={styles.tableCell}>Nombre</th>
+                    <th style={styles.tableCell}>Descripcion</th>
+                    <th style={styles.tableCell}>Boletas</th>
+                    <th style={styles.tableCell}>Precio</th>
+                    <th style={styles.tableCell}>Estado</th>
+                    <th style={styles.tableCell}>Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-700">
+                <tbody>
                   {myEvents.map((event) => (
-                    <tr key={event.event_id} className="hover:bg-slate-800">
-                      <td className="px-6 py-4 font-medium">{event.name}</td>
-                      <td className="px-6 py-4 text-sm text-slate-400 max-w-xs truncate">{event.description || '—'}</td>
-                      <td className="px-6 py-4">{event.total_seats}</td>
-                      <td className="px-6 py-4">${event.price_amount.toLocaleString()} COP</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${statusColor(event.status)}`}>
-                          {event.status}
-                        </span>
+                    <tr key={event.event_id} style={styles.tableRow}>
+                      <td style={styles.tableCell}>{event.name}</td>
+                      <td style={{ ...styles.tableCell, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.description || '—'}</td>
+                      <td style={styles.tableCell}>{event.total_seats}</td>
+                      <td style={styles.tableCell}>${event.price_amount.toLocaleString()} COP</td>
+                      <td style={styles.tableCell}>
+                        <span style={{ ...styles.badge, ...statusColor(event.status) }}>{event.status}</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td style={styles.tableCell}>
                         {editing === event.event_id ? (
-                          <form onSubmit={handleUpdateEvent} className="flex flex-col sm:flex-row gap-2 items-end">
+                          <form onSubmit={handleUpdateEvent} style={styles.editForm}>
                             <input
-                              className="px-3 py-2 border border-slate-600 rounded text-sm bg-slate-900 text-slate-100 w-40 sm:w-48"
+                              style={styles.editInput}
                               value={editForm.name}
                               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                               required
                             />
                             <input
-                              className="px-3 py-2 border border-slate-600 rounded text-sm bg-slate-900 text-slate-100 w-40 sm:w-48"
+                              style={styles.editInput}
                               value={editForm.description}
                               onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                             />
                             <input
                               type="number"
-                              className="px-3 py-2 border border-slate-600 rounded text-sm bg-slate-900 text-slate-100 w-24 sm:w-32"
+                              style={styles.editInputSmall}
                               value={editForm.totalSeats}
                               onChange={(e) => setEditForm({ ...editForm, totalSeats: e.target.value })}
                               required
                             />
                             <input
                               type="number"
-                              className="px-3 py-2 border border-slate-600 rounded text-sm bg-slate-900 text-slate-100 w-24 sm:w-32"
+                              style={styles.editInputSmall}
                               value={editForm.price}
                               onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
                               required
                             />
-                            <button
-                              type="submit"
-                              disabled={loading}
-                              className="px-5 py-2.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-                            >
+                            <Button type="submit" disabled={loading} variant="primary" style={styles.editBtn}>
                               Guardar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditing(null)}
-                              className="px-5 py-2.5 bg-slate-700 text-slate-300 text-sm rounded hover:bg-slate-600"
-                            >
+                            </Button>
+                            <Button type="button" variant="outline" onClick={() => setEditing(null)} style={styles.editCancelBtn}>
                               Cancelar
-                            </button>
+                            </Button>
                           </form>
                         ) : (
                           <>
                             {event.status === 'DRAFT' && (
-                              <button
+                              <Button
+                                type="button"
                                 onClick={() => {
                                   setEditing(event.event_id);
                                   setEditForm({
@@ -563,19 +558,22 @@ const AdminDashboard: React.FC = () => {
                                     price: String(event.price_amount),
                                   });
                                 }}
-                                className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                                variant="primary"
+                                style={styles.tableBtn}
                               >
                                 Editar
-                              </button>
+                              </Button>
                             )}
                             {event.status === 'DRAFT' && (
-                              <button
+                              <Button
+                                type="button"
                                 onClick={() => handlePublish(event.event_id)}
                                 disabled={loading}
-                                className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 ml-2"
+                                variant="primary"
+                                style={{ ...styles.tableBtn, marginLeft: 8 }}
                               >
                                 Publicar
-                              </button>
+                              </Button>
                             )}
                           </>
                         )}
@@ -584,7 +582,7 @@ const AdminDashboard: React.FC = () => {
                   ))}
                   {myEvents.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-slate-400">
+                      <td colSpan={6} style={{ ...styles.tableCell, padding: 32, textAlign: 'center', color: colors.muted }}>
                         No tienes eventos creados.
                       </td>
                     </tr>
@@ -598,65 +596,65 @@ const AdminDashboard: React.FC = () => {
 
       {activeTab === 'orders' && (
         <div>
-          <div className="bg-slate-800 rounded-xl shadow border border-slate-700 overflow-hidden">
-            <div className="p-6 border-b border-slate-700">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div style={styles.sectionCard}>
+            <div style={styles.sectionHeader}>
+              <div style={styles.ordersSearchBar}>
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-100">Ordenes del Sistema</h2>
-                  <p className="text-sm text-slate-400">Busca por ID de transacción para reembolsar</p>
+                  <h2 style={styles.sectionTitle}>Ordenes del Sistema</h2>
+                  <p style={styles.subtitle}>Busca por ID de transacción para reembolsar</p>
                 </div>
-                <div className="relative w-full sm:w-64">
+                <div style={styles.searchInputWrap}>
                   <input
                     type="text"
                     placeholder="ID de transacción (order_id)"
                     value={refundSearch}
                     onChange={(e) => setRefundSearch(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-900 text-slate-100 text-sm"
+                    style={styles.searchInput}
                   />
                 </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-slate-800">
-                  <tr>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">ID de Transacción</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Usuario</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Monto</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Estado</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-slate-400">Acciones</th>
+            <div style={styles.tableWrapper}>
+              <table style={styles.table}>
+                <thead style={styles.tableHead}>
+                  <tr style={styles.tableRow}>
+                    <th style={styles.tableCell}>ID de Transacción</th>
+                    <th style={styles.tableCell}>Usuario</th>
+                    <th style={styles.tableCell}>Monto</th>
+                    <th style={styles.tableCell}>Estado</th>
+                    <th style={styles.tableCell}>Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-700">
+                <tbody>
                   {filteredOrders.map((order) => (
-                    <tr key={order.order_id} className="hover:bg-slate-800">
-                      <td className="px-6 py-4 font-mono text-sm">{order.order_id}</td>
-                      <td className="px-6 py-4">{order.user_email}</td>
-                      <td className="px-6 py-4">${order.total_amount.toLocaleString()} COP</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${orderStatusColor(order.status)}`}>
-                          {order.status}
-                        </span>
+                    <tr key={order.order_id} style={styles.tableRow}>
+                      <td style={styles.tableCell}>{order.order_id}</td>
+                      <td style={styles.tableCell}>{order.user_email}</td>
+                      <td style={styles.tableCell}>${order.total_amount.toLocaleString()} COP</td>
+                      <td style={styles.tableCell}>
+                        <span style={{ ...styles.badge, ...orderStatusColor(order.status) }}>{order.status}</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td style={styles.tableCell}>
                         {order.status === 'CONFIRMED' && (
-                          <button
+                          <Button
+                            type="button"
                             onClick={() => handleRefund(order.order_id)}
                             disabled={loading}
-                            className="px-5 py-2.5 bg-orange-600 text-white text-sm rounded hover:bg-orange-700 disabled:opacity-50"
+                            variant="danger"
+                            style={styles.tableBtn}
                           >
                             Reembolsar
-                          </button>
+                          </Button>
                         )}
                         {order.status !== 'CONFIRMED' && (
-                          <span className="text-xs text-slate-500">No reembolsable</span>
+                          <span style={{ ...styles.badge, color: colors.muted, background: 'transparent', border: 'none' }}>No reembolsable</span>
                         )}
                       </td>
                     </tr>
                   ))}
                   {filteredOrders.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
+                      <td colSpan={5} style={{ ...styles.tableCell, padding: 32, textAlign: 'center', color: colors.muted }}>
                         No hay ordenes registradas con ese ID de transacción.
                       </td>
                     </tr>
@@ -669,26 +667,24 @@ const AdminDashboard: React.FC = () => {
       )}
 
       {activeTab === 'monitoring' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div style={styles.monitoringGrid}>
           {/* Grafico 1: Errores en la compra */}
-          <div className="bg-slate-800 rounded-xl shadow border border-slate-700">
-            <div className="p-6 border-b border-slate-700 flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-slate-100">Errores en la Compra</h2>
-              <span className="text-xs font-medium bg-red-900/20 text-red-400 px-2 py-1 rounded">{errorLogs.length}</span>
+          <div style={styles.monitoringCard}>
+            <div style={styles.monitoringCardHeader}>
+              <h2 style={styles.monitoringCardTitle}>Errores en la Compra</h2>
+              <span style={styles.statPill}>{errorLogs.length}</span>
             </div>
-            <div className="divide-y divide-slate-700">
+            <div style={styles.monitoringList}>
               {errorLogs.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-sm">Sin errores de compra recientes</div>
+                <div style={styles.emptyState}>Sin errores de compra recientes</div>
               ) : (
                 errorLogs.map((err, i) => (
-                  <div key={i} className="p-6">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-sm font-medium text-slate-100">{err.operation}</p>
-                        <p className="text-sm text-slate-400">{err.message}</p>
-                      </div>
-                      <span className="text-xs text-slate-500">{new Date(err.timestamp).toLocaleString()}</span>
+                  <div key={i} style={styles.errorLogItem}>
+                    <div>
+                      <p style={styles.errorLogOp}>{err.operation}</p>
+                      <p style={styles.errorLogMsg}>{err.message}</p>
                     </div>
+                    <span style={styles.errorLogTime}>{new Date(err.timestamp).toLocaleString()}</span>
                   </div>
                 ))
               )}
@@ -696,51 +692,49 @@ const AdminDashboard: React.FC = () => {
           </div>
 
           {/* Grafico 2: Compras de boletos exitosas */}
-          <div className="bg-slate-800 rounded-xl shadow border border-slate-700 p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-slate-100">Compras de Boletos Exitosas</h2>
-              <span className="text-xs font-medium bg-green-900/20 text-green-400 px-2 py-1 rounded">{stats.ordersConfirmed}</span>
+          <div style={styles.monitoringCardWide}>
+            <div style={styles.monitoringCardHeader}>
+              <h2 style={styles.monitoringCardTitle}>Compras de Boletos Exitosas</h2>
+              <span style={styles.statPill}>{stats.ordersConfirmed}</span>
             </div>
-
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div className="bg-slate-800 p-6 rounded-xl">
-                <div className="text-3xl font-bold text-green-600">{stats.ordersConfirmed}</div>
-                <div className="text-sm text-slate-400 mt-1">Ordenes confirmadas</div>
+            <div style={styles.statTiles}>
+              <div style={styles.statTile}>
+                <div style={styles.statValue}>{stats.ordersConfirmed}</div>
+                <div style={styles.statLabel}>Ordenes confirmadas</div>
               </div>
-              <div className="bg-slate-800 p-6 rounded-xl">
-                <div className="text-3xl font-bold text-blue-600">{stats.eventsPublished}</div>
-                <div className="text-sm text-slate-400 mt-1">Eventos publicados</div>
+              <div style={styles.statTile}>
+                <div style={styles.statValue}>{stats.eventsPublished}</div>
+                <div style={styles.statLabel}>Eventos publicados</div>
               </div>
-              <div className="bg-slate-800 p-6 rounded-xl">
-                <div className="text-3xl font-bold text-indigo-600">{stats.eventsCreated}</div>
-                <div className="text-sm text-slate-400 mt-1">Eventos creados</div>
+              <div style={styles.statTile}>
+                <div style={styles.statValue}>{stats.eventsCreated}</div>
+                <div style={styles.statLabel}>Eventos creados</div>
               </div>
-              <div className="bg-slate-800 p-6 rounded-xl">
-                <div className="text-3xl font-bold text-orange-600">{stats.refundsRequested}</div>
-                <div className="text-sm text-slate-400 mt-1">Reembolsos solicitados</div>
+              <div style={styles.statTile}>
+                <div style={styles.statValue}>{stats.refundsRequested}</div>
+                <div style={styles.statLabel}>Reembolsos solicitados</div>
               </div>
             </div>
-
-            <div className="mt-6 h-64">
-              <svg className="w-full h-full" viewBox="0 0 700 350">
+            <div style={styles.chartWrap}>
+              <svg style={styles.chartSvg} viewBox="0 0 700 350">
                 <defs>
                   <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop stopColor="rgb(99,102,241)" stopOpacity="1" offset="0%" />
-                    <stop stopColor="rgb(79,70,229)" stopOpacity="1" offset="100%" />
+                    <stop stopColor={colors.primary} stopOpacity={1} offset="0%" />
+                    <stop stopColor={colors.primary} stopOpacity={1} offset="100%" />
                   </linearGradient>
                 </defs>
                 <rect x="60" y="120" width="140" height="160" fill="url(#grad1)" rx="10" />
                 <rect x="230" y="60" width="140" height="220" fill="url(#grad1)" rx="10" />
                 <rect x="400" y="170" width="140" height="100" fill="url(#grad1)" rx="10" />
                 <rect x="570" y="90" width="140" height="140" fill="url(#grad1)" rx="10" />
-                <text x="130" y="310" text-anchor="middle" font-size="14" fill="#94a3b8">Confirmadas</text>
-                <text x="300" y="310" text-anchor="middle" font-size="14" fill="#94a3b8">Publicadas</text>
-                <text x="470" y="310" text-anchor="middle" font-size="14" fill="#94a3b8">Creadas</text>
-                <text x="640" y="310" text-anchor="middle" font-size="14" fill="#94a3b8">Reembolsos</text>
-                <text x="130" y="105" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.ordersConfirmed}</text>
-                <text x="300" y="45" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.eventsPublished}</text>
-                <text x="470" y="160" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.eventsCreated}</text>
-                <text x="640" y="75" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">{stats.refundsRequested}</text>
+                <text x="130" y="310" textAnchor="middle" fontSize="14" fill={colors.muted}>Confirmadas</text>
+                <text x="300" y="310" textAnchor="middle" fontSize="14" fill={colors.muted}>Publicadas</text>
+                <text x="470" y="310" textAnchor="middle" fontSize="14" fill={colors.muted}>Creadas</text>
+                <text x="640" y="310" textAnchor="middle" fontSize="14" fill={colors.muted}>Reembolsos</text>
+                <text x="130" y="105" textAnchor="middle" fontSize="16" fontWeight="bold" fill={colors.text}>{stats.ordersConfirmed}</text>
+                <text x="300" y="45" textAnchor="middle" fontSize="16" fontWeight="bold" fill={colors.text}>{stats.eventsPublished}</text>
+                <text x="470" y="160" textAnchor="middle" fontSize="16" fontWeight="bold" fill={colors.text}>{stats.eventsCreated}</text>
+                <text x="640" y="75" textAnchor="middle" fontSize="16" fontWeight="bold" fill={colors.text}>{stats.refundsRequested}</text>
               </svg>
             </div>
           </div>
@@ -751,3 +745,251 @@ const AdminDashboard: React.FC = () => {
 };
 
 export default AdminDashboard;
+
+const styles: Record<string, React.CSSProperties> = {
+  root: {
+    minHeight: '100vh',
+    padding: 24,
+    maxWidth: 1400,
+    margin: '0 auto',
+    background: colors.background,
+    color: colors.text,
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+  },
+  headerBar: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  title: { margin: 0, fontSize: 24, fontWeight: 700, color: colors.text },
+  subtitle: { margin: 0, color: colors.muted, fontSize: 14 },
+  logoutBtn: { padding: '10px 20px', fontSize: 14 },
+  messageBanner: {
+    padding: 12,
+    borderRadius: 6,
+    marginBottom: 16,
+    border: `1px solid ${colors.border}`,
+    fontSize: 14,
+  },
+  messageSuccess: {
+    background: 'rgba(172, 228, 170, 0.15)',
+    color: colors.accent,
+    border: `1px solid ${colors.accent}`,
+  },
+  messageError: {
+    background: colors.errorBg,
+    color: colors.error,
+    border: `1px solid ${colors.errorBorder}`,
+  },
+  tabBar: {
+    display: 'flex',
+    borderBottom: `1px solid ${colors.border}`,
+    marginBottom: 24,
+    gap: 0,
+  },
+  tabBtn: {
+    background: 'transparent',
+    border: 'none',
+    borderBottom: `2px solid transparent`,
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+    padding: '16px 20px',
+  },
+  tabBtnActive: {
+    color: colors.primary,
+    borderBottom: `2px solid ${colors.primary}`,
+  },
+  sectionCard: {
+    background: colors.surface,
+    borderRadius: 12,
+    border: `1px solid ${colors.border}`,
+    marginBottom: 24,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    padding: 20,
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  sectionTitle: { margin: 0, fontSize: 18, fontWeight: 600, color: colors.text },
+  createEventBtn: {
+    marginBottom: 16,
+    padding: '12px 24px',
+    fontSize: 16,
+    fontWeight: 600,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+  },
+  createFormCard: {
+    background: colors.surface,
+    padding: 24,
+    borderRadius: 12,
+    border: `1px solid ${colors.border}`,
+    marginBottom: 24,
+  },
+  formTitle: { margin: '0 0 16px 0', fontSize: 20, fontWeight: 600, color: colors.text },
+  createForm: { display: 'grid', gap: 16 },
+  formFull: { display: 'flex', flexDirection: 'column', gap: 6 },
+  formHalf: { display: 'flex', flexDirection: 'column', gap: 6 },
+  formLabel: { fontSize: 13, fontWeight: 600, marginBottom: 4, color: colors.muted },
+  formInput: {
+    width: '100%',
+    padding: '10px 12px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    fontSize: 15,
+    color: colors.text,
+    background: colors.background,
+  },
+  createSubmitBtn: {
+    width: 'fit-content',
+    padding: '12px 28px',
+    fontSize: 17,
+    fontWeight: 600,
+  },
+  tableWrapper: { overflowX: 'auto' },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  tableHead: {},
+  tableRow: { borderBottom: `1px solid ${colors.border}` },
+  tableCell: { padding: '16px 20px', textAlign: 'left', fontSize: 14, color: colors.text },
+  badge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '6px 12px',
+    borderRadius: 20,
+    fontSize: 12,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  tableBtn: {
+    padding: '8px 16px',
+    fontSize: 14,
+    fontWeight: 600,
+  },
+  editForm: {
+    display: 'flex',
+    gap: 8,
+    alignItems: 'flex-end',
+    flexWrap: 'wrap',
+  },
+  editInput: {
+    padding: '8px 12px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 6,
+    fontSize: 13,
+    color: colors.text,
+    background: colors.background,
+    minWidth: 120,
+  },
+  editInputSmall: {
+    padding: '8px 12px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 6,
+    fontSize: 13,
+    color: colors.text,
+    background: colors.background,
+    minWidth: 80,
+  },
+  editBtn: { padding: '8px 16px', fontSize: 14, fontWeight: 600 },
+  editCancelBtn: { padding: '8px 16px', fontSize: 14, fontWeight: 600, color: colors.muted },
+  ordersSearchBar: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  searchInputWrap: { width: '100%', maxWidth: 300 },
+  searchInput: {
+    width: '100%',
+    padding: '10px 12px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    fontSize: 14,
+    color: colors.text,
+    background: colors.background,
+  },
+  monitoringGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: 16,
+  },
+  monitoringCard: {
+    background: colors.surface,
+    borderRadius: 12,
+    border: `1px solid ${colors.border}`,
+  },
+  monitoringCardWide: {
+    background: colors.surface,
+    borderRadius: 12,
+    border: `1px solid ${colors.border}`,
+  },
+  monitoringCardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  monitoringCardTitle: { margin: 0, fontSize: 18, fontWeight: 600, color: colors.text },
+  statPill: {
+    padding: '2px 8px',
+    borderRadius: 20,
+    fontSize: 11,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    background: 'rgba(172, 228, 170, 0.15)',
+    color: colors.accent,
+    border: `1px solid ${colors.accent}`,
+  },
+  monitoringList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 0,
+  },
+  emptyState: {
+    padding: 32,
+    textAlign: 'center',
+    color: colors.muted,
+    fontSize: 14,
+  },
+  errorLogItem: {
+    padding: 16,
+    borderBottom: `1px solid ${colors.border}`,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'start',
+  },
+  errorLogOp: { margin: 0, fontSize: 14, fontWeight: 600, color: colors.text },
+  errorLogMsg: { margin: '4px 0 0 0', fontSize: 14, color: colors.muted },
+  errorLogTime: { fontSize: 12, color: colors.muted },
+  statTiles: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: 16,
+    marginBottom: 24,
+  },
+  statTile: {
+    background: colors.background,
+    padding: 16,
+    borderRadius: 12,
+    border: `1px solid ${colors.border}`,
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: 800,
+    color: colors.text,
+    margin: '0 0 4px 0',
+  },
+  statLabel: { fontSize: 12, color: colors.muted },
+  chartWrap: { padding: 16 },
+  chartSvg: { width: '100%', height: 200, display: 'block' },
+};
+
+// Apply responsive padding via inline media is not supported; root uses fixed 24px.
+// Keep a desktop-friendly padding by noting md:p-6 intent is approximated.

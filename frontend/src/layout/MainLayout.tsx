@@ -2,6 +2,8 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useState } from 'react';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 export default function MainLayout() {
   const { user, logout } = useAuth();
@@ -63,15 +65,17 @@ export default function MainLayout() {
           <div style={styles.userInfo}>
             <p style={styles.userName}>{user?.username}</p>
             <p style={styles.userRole}>{user?.role}</p>
-            <button
+            <Button
+              type="button"
               onClick={() => {
                 logout();
                 navigate('/login');
               }}
+              variant="ghost"
               style={styles.logoutBtn}
             >
               Cerrar sesión
-            </button>
+            </Button>
           </div>
         )}
       </aside>
@@ -86,8 +90,8 @@ export default function MainLayout() {
 function getRoleBadgeStyle(isOrganizer: boolean): React.CSSProperties {
   return {
     padding: '4px 10px',
-    background: isOrganizer ? '#2563eb' : '#059669',
-    color: '#ffffff',
+    background: isOrganizer ? colors.primary : colors.accent,
+    color: isOrganizer ? '#ffffff' : '#15042D',
     borderRadius: 20,
     fontSize: 11,
     fontWeight: 600,
@@ -103,10 +107,10 @@ function getNavLinkStyle(active: boolean, collapsed: boolean): React.CSSProperti
     gap: 10,
     padding: collapsed ? '12px 0' : '10px 14px',
     borderRadius: 8,
-    color: active ? '#ffffff' : '#94a3b8',
+    color: active ? colors.text : colors.muted,
     textDecoration: 'none',
     fontSize: 14,
-    background: active ? '#2563eb' : 'transparent',
+    background: active ? colors.primary : 'transparent',
     border: 'none',
     cursor: 'pointer',
     width: collapsed ? '100%' : '100%',
@@ -119,30 +123,30 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     height: '100vh',
     fontFamily: 'system-ui, -apple-system, sans-serif',
-    background: '#0f172a',
+    background: colors.background,
   },
   sidebar: {
     width: 260,
-    background: '#1e293b',
-    color: '#f1f5f9',
+    background: colors.surface,
+    color: colors.text,
     display: 'flex',
     flexDirection: 'column',
-    borderRight: '1px solid #334155',
+    borderRight: `1px solid ${colors.border}`,
     transition: 'width 0.2s ease',
   },
   brand: {
     padding: '24px 20px',
-    borderBottom: '1px solid #334151',
+    borderBottom: `1px solid ${colors.border}`,
     display: 'flex',
     alignItems: 'center',
     gap: 10,
     transition: 'padding 0.2s ease',
   },
-  brandTitle: { margin: 0, fontSize: 20, fontWeight: 700, color: '#ffffff' },
+  brandTitle: { margin: 0, fontSize: 20, fontWeight: 700, color: colors.text },
   toggleBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#94a3b8',
+    color: colors.muted,
     cursor: 'pointer',
     fontSize: 16,
     padding: 6,
@@ -157,20 +161,16 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
   },
   navIcon: { fontSize: 18 },
-  navTitle: { fontSize: 14, fontWeight: 500 },
+  navTitle: { fontSize: 14, fontWeight: 500, color: colors.text },
   userInfo: {
     padding: 20,
-    borderTop: '1px solid #334155',
+    borderTop: `1px solid ${colors.border}`,
   },
-  userName: { margin: '0 0 4px 0', fontSize: 14, fontWeight: 600, color: '#f1f5f9' },
-  userRole: { margin: '0 0 12px 0', fontSize: 12, color: '#94a3b8' },
+  userName: { margin: '0 0 4px 0', fontSize: 14, fontWeight: 600, color: colors.text },
+  userRole: { margin: '0 0 12px 0', fontSize: 12, color: colors.muted },
   logoutBtn: {
     width: '100%',
     padding: 10,
-    background: 'transparent',
-    border: '1px solid #334155',
-    color: '#94a3b8',
-    borderRadius: 6,
     fontSize: 13,
     cursor: 'pointer',
   },
@@ -178,8 +178,8 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     overflow: 'auto',
     padding: 32,
-    background: '#0f172a',
-    color: '#f1f5f9',
+    background: colors.background,
+    color: colors.text,
     transition: 'padding 0.2s ease',
   },
 };

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/api';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 interface PaymentMethod {
   value: string;
@@ -76,7 +78,7 @@ export default function Order() {
   return (
     <div style={styles.container}>
       <nav style={styles.nav}>
-        <button onClick={handleBack} style={styles.backBtn}>← Reserva</button>
+        <Button type="button" onClick={handleBack} variant="ghost" style={styles.backBtn}>← Reserva</Button>
       </nav>
 
       <h1 style={styles.title}>Pasarela de Pago</h1>
@@ -165,13 +167,9 @@ export default function Order() {
             El pago se procesa de forma asíncrona. Recibirás la confirmación en unos segundos.
           </p>
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={styles.payBtn}
-          >
+          <Button type="submit" disabled={loading} variant="primary" style={styles.payBtn}>
             {loading ? 'Procesando pago…' : 'Pagar y confirmar orden'}
-          </button>
+          </Button>
         </form>
       </div>
 
@@ -181,70 +179,70 @@ export default function Order() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 32, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', maxWidth: 600, margin: '0 auto', background: '#0f172a', color: '#f1f5f9' },
+  container: { padding: 32, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', maxWidth: 600, margin: '0 auto', background: colors.background, color: colors.text },
   nav: { marginBottom: 32 },
   backBtn: {
-    background: 'none',
-    border: '1px solid #334155',
-    padding: '10px 20px',
-    borderRadius: 8,
-    cursor: 'pointer',
+    background: 'transparent',
+    border: 'none',
+    color: colors.muted,
     fontSize: 15,
     fontWeight: 600,
+    cursor: 'pointer',
+    padding: 0,
   },
-  title: { margin: '0 0 24px 0', fontSize: 28, color: '#ffffff' },
+  title: { margin: '0 0 24px 0', fontSize: 28, color: colors.text },
   card: {
     padding: 32,
-    background: '#1e293b',
-    border: '1px solid #334155',
+    background: colors.surface,
+    border: `1px solid ${colors.border}`,
     borderRadius: 14,
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
   },
   orderSummary: {
     marginBottom: 28,
     padding: 20,
-    background: '#0f172a',
+    background: colors.background,
     borderRadius: 10,
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
   },
-  summaryTitle: { margin: '0 0 16px 0', fontSize: 18, color: '#ffffff', fontWeight: 700 },
+  summaryTitle: { margin: '0 0 16px 0', fontSize: 18, color: colors.text, fontWeight: 700 },
   summaryLine: {
     display: 'flex',
     justifyContent: 'space-between',
     marginBottom: 8,
     fontSize: 15,
-    color: '#cbd5e1',
+    color: colors.muted,
   },
   summaryLineTotal: {
     fontWeight: 700,
     fontSize: 17,
-    color: '#ffffff',
-    borderTop: '1px solid #334155',
+    color: colors.text,
+    borderTop: `1px solid ${colors.border}`,
     paddingTop: 12,
     marginTop: 8,
   },
-  summaryLabel: { color: '#94a3b8' },
+  summaryLabel: { color: colors.muted },
   summaryValue: { fontWeight: 600 },
-  summaryTotal: { fontWeight: 800, color: '#ffffff' },
+  summaryTotal: { fontWeight: 800, color: colors.text },
   form: { display: 'flex', flexDirection: 'column', gap: 20 },
   inputGroup: { display: 'flex', flexDirection: 'column', gap: 6 },
-  label: { fontSize: 14, fontWeight: 600, color: '#cbd5e1' },
+  label: { fontSize: 14, fontWeight: 600, color: colors.muted },
   input: {
     padding: 12,
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
     borderRadius: 8,
     fontSize: 16,
-    color: '#f1f5f9',
-    background: '#0f172a',
+    color: colors.text,
+    background: colors.background,
   },
   cardFields: {
-    background: '#0f172a',
-    border: '1px solid #334155',
+    background: colors.background,
+    border: `1px solid ${colors.border}`,
     borderRadius: 10,
     padding: 20,
     marginBottom: 20,
   },
-  cardTitle: { margin: '0 0 16px 0', fontSize: 16, color: '#ffffff', fontWeight: 600 },
+  cardTitle: { margin: '0 0 16px 0', fontSize: 16, color: colors.text, fontWeight: 600 },
   cardRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
@@ -253,27 +251,22 @@ const styles: Record<string, React.CSSProperties> = {
   inputGroupHalf: { display: 'flex', flexDirection: 'column', gap: 6 },
   hint: {
     fontSize: 14,
-    color: '#94a3b8',
+    color: colors.muted,
     marginBottom: 12,
   },
   payBtn: {
     width: '100%',
     padding: 16,
-    background: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 10,
     fontSize: 17,
     fontWeight: 600,
-    cursor: 'pointer',
   },
   error: {
     marginBottom: 16,
     padding: 12,
-    background: '#7f1d1d',
-    color: '#fecaca',
+    background: colors.errorBg,
+    color: colors.error,
     borderRadius: 6,
     fontSize: 14,
-    border: '1px solid #b91c1c',
+    border: `1px solid ${colors.errorBorder}`,
   },
 };

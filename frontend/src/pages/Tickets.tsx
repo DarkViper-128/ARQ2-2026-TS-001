@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, useAuth } from '../lib/api';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 interface Ticket {
   ticketId: string;
@@ -43,9 +45,9 @@ export default function Tickets() {
       <div style={styles.empty}>
         <h2>No tienes boletos</h2>
         <p>Compra entradas para tus eventos favoritos.</p>
-        <button onClick={handleBack} style={styles.backBtn}>
+        <Button onClick={handleBack} variant="outline" style={styles.backBtn}>
           Ir al catálogo
-        </button>
+        </Button>
       </div>
     );
   }
@@ -53,7 +55,7 @@ export default function Tickets() {
   return (
     <div style={styles.container}>
       <nav style={styles.nav}>
-        <button onClick={handleBack} style={styles.backBtn}>← Catálogo</button>
+        <Button type="button" onClick={handleBack} variant="ghost" style={styles.backBtn}>← Catálogo</Button>
       </nav>
 
       <h1 style={styles.title}>Mis boletos</h1>
@@ -84,23 +86,22 @@ export default function Tickets() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 24, fontFamily: 'system-ui, sans-serif', background: '#0f172a', color: '#f1f5f9' },
+  container: { padding: 24, fontFamily: 'system-ui, sans-serif', background: colors.background, color: colors.text },
   nav: { marginBottom: 32 },
   backBtn: {
-    background: 'none',
-    border: '1px solid #334155',
-    padding: '8px 16px',
-    borderRadius: 6,
+    background: 'transparent',
+    border: 'none',
+    color: colors.muted,
     cursor: 'pointer',
-    color: '#94a3b8',
+    padding: 0,
   },
-  title: { fontSize: 28, color: '#ffffff', marginBottom: 24 },
+  title: { fontSize: 28, color: colors.text, marginBottom: 24 },
   empty: {
     textAlign: 'center',
     padding: 60,
-    background: '#1e293b',
+    background: colors.surface,
     borderRadius: 12,
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
   },
   ticketsGrid: {
     display: 'grid',
@@ -109,8 +110,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   ticketCard: {
     padding: 24,
-    background: '#1e293b',
-    border: '2px solid #2563eb',
+    background: colors.surface,
+    border: `1px solid ${colors.border}`,
     borderRadius: 12,
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
   },
@@ -120,29 +121,29 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     marginBottom: 20,
   },
-  ticketTitle: { margin: 0, fontSize: 20, color: '#ffffff' },
+  ticketTitle: { margin: 0, fontSize: 20, color: colors.text },
   seatId: {
     padding: '4px 10px',
-    background: '#1e3a8a',
-    color: '#bfdbfe',
+    background: colors.primary,
+    color: '#ffffff',
     borderRadius: 20,
     fontSize: 12,
     fontWeight: 600,
-    border: '1px solid #3b82f6',
+    border: `1px solid ${colors.border}`,
   },
   qrCode: {
     height: 120,
-    background: '#0f172a',
+    background: colors.background,
     borderRadius: 8,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
   },
   qrPlaceholder: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: colors.muted,
     textAlign: 'center',
     maxWidth: '100%',
   },
@@ -151,5 +152,5 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 6,
   },
-  ticketText: { margin: 0, fontSize: 14, color: '#cbd5e1' },
+  ticketText: { margin: 0, fontSize: 14, color: colors.text },
 };

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 type View = 'selector' | 'organizerLogin';
 
@@ -69,22 +71,24 @@ export default function Login() {
             </p>
             {error && <p style={styles.error}>{error}</p>}
             <div style={styles.roleButtons}>
-              <button
+              <Button
                 type="button"
                 onClick={handleEnterAsFan}
                 disabled={loading}
+                variant="primary"
                 style={styles.roleBtn}
               >
                 🎟️ Entrar como Fan
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => setView('organizerLogin')}
                 disabled={loading}
+                variant="outline"
                 style={styles.roleBtnOutline}
               >
                 👤 Entrar como Organizador
-              </button>
+              </Button>
             </div>
           </>
         ) : (
@@ -93,16 +97,17 @@ export default function Login() {
             <p style={styles.subtitle}>
               Inicio de sesión — Organizador
             </p>
-            <button
+            <Button
               type="button"
               onClick={() => {
                 setView('selector');
                 setError('');
               }}
+              variant="ghost"
               style={styles.backBtn}
             >
               ← Volver
-            </button>
+            </Button>
             {error && <p style={styles.error}>{error}</p>}
             <form onSubmit={handleSubmit} style={styles.form}>
               <div style={styles.inputGroup}>
@@ -127,9 +132,9 @@ export default function Login() {
                   required
                 />
               </div>
-              <button type="submit" disabled={loading} style={styles.button}>
+              <Button type="submit" disabled={loading} variant="primary" style={styles.button}>
                 {loading ? 'Ingresando...' : 'Iniciar sesión'}
-              </button>
+              </Button>
             </form>
             <div style={styles.hint}>
               <p>Usuarios de prueba:</p>
@@ -151,28 +156,30 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    background: '#0f172a',
+    background: colors.background,
+    color: colors.text,
     fontFamily: 'system-ui, sans-serif',
   },
   card: {
-    background: '#1e293b',
+    background: colors.surface,
     padding: 40,
     borderRadius: 12,
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-    width: 100,
-    maxWidth: 420,
-    border: '1px solid #334155',
+    width: 300,
+    maxWidth: 300,
+    border: `1px solid ${colors.border}`,
+    color: colors.text,
   },
-  title: { margin: '0 0 8px 0', fontSize: 28, color: '#ffffff' },
-  subtitle: { color: '#94a3b8', marginBottom: 24 },
+  title: { margin: '0 0 8px 0', fontSize: 28, color: colors.text },
+  subtitle: { color: colors.muted, marginBottom: 24 },
   error: {
-    color: '#fca5a5',
-    background: '#450a0a',
+    color: colors.error,
+    background: colors.errorBg,
     padding: 10,
     borderRadius: 6,
     fontSize: 14,
     marginBottom: 20,
-    border: '1px solid #7f1d1d',
+    border: `1px solid ${colors.errorBorder}`,
   },
   roleButtons: {
     display: 'flex',
@@ -181,32 +188,22 @@ const styles: Record<string, React.CSSProperties> = {
   },
   roleBtn: {
     padding: '18px 24px',
-    background: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 10,
     fontSize: 18,
     fontWeight: 600,
-    cursor: 'pointer',
     textAlign: 'left',
     width: '100%',
   },
   roleBtnOutline: {
     padding: '18px 24px',
-    background: '#1e293b',
-    color: '#2563eb',
-    border: '2px solid #2563eb',
-    borderRadius: 10,
     fontSize: 18,
     fontWeight: 600,
-    cursor: 'pointer',
     textAlign: 'left',
     width: '100%',
   },
   backBtn: {
-    background: 'none',
+    background: 'transparent',
     border: 'none',
-    color: '#94a3b8',
+    color: colors.muted,
     fontSize: 14,
     cursor: 'pointer',
     marginBottom: 16,
@@ -215,36 +212,31 @@ const styles: Record<string, React.CSSProperties> = {
   },
   form: { display: 'flex', flexDirection: 'column', gap: 15 },
   inputGroup: { display: 'flex', flexDirection: 'column', gap: 6 },
-  label: { fontSize: 14, fontWeight: 600, color: '#cbd5e1' },
+  label: { fontSize: 14, fontWeight: 600, color: colors.muted },
   input: {
     padding: 10,
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
     borderRadius: 6,
     fontSize: 16,
-    color: '#f1f5f9',
-    background: '#0f172a',
+    color: colors.text,
+    background: colors.background,
   },
   button: {
     marginTop: 10,
     padding: '14px 24px',
-    background: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 8,
     fontSize: 16,
     fontWeight: 600,
-    cursor: 'pointer',
     width: '100%',
   },
   hint: {
     marginTop: 25,
     paddingTop: 20,
-    borderTop: '1px solid #334155',
+    borderTop: `1px solid ${colors.border}`,
   },
   list: {
     margin: 8,
     paddingLeft: 20,
-    color: '#94a3b8',
+    color: colors.muted,
     fontSize: 13,
     lineHeight: '1.8',
   },

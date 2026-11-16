@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, useAuth } from '../lib/api';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 interface Event {
   eventId: string;
@@ -43,11 +45,18 @@ export default function Catalog() {
         <h1 style={styles.title}>FlashTix</h1>
         <div style={styles.userInfo}>
           <span>👤 {user?.username} ({user?.role})</span>
-          <button onClick={() => {
-            localStorage.removeItem('flashtix_token');
-            localStorage.removeItem('flashtix_user');
-            navigate('/login');
-          }} style={styles.logoutBtn}>Cerrar sesión</button>
+          <Button
+            type="button"
+            onClick={() => {
+              localStorage.removeItem('flashtix_token');
+              localStorage.removeItem('flashtix_user');
+              navigate('/login');
+            }}
+            variant="danger"
+            style={styles.logoutBtn}
+          >
+            Cerrar sesión
+          </Button>
         </div>
       </header>
 
@@ -65,13 +74,14 @@ export default function Catalog() {
               </p>
               <span style={styles.statusBadge}>{event.status}</span>
             </div>
-            <button
+            <Button
               onClick={() => navigate(`/events/${event.eventId}/seats`)}
-              style={styles.viewSeatsBtn}
+              variant="primary"
               disabled={event.status !== 'ON_SALE'}
+              style={styles.viewSeatsBtn}
             >
               Ver asientos
-            </button>
+            </Button>
           </div>
         ))}
       </div>
@@ -80,19 +90,19 @@ export default function Catalog() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 24, fontFamily: 'system-ui, sans-serif', background: '#0f172a', color: '#f1f5f9', minHeight: '100vh' },
+  container: { padding: 24, fontFamily: 'system-ui, sans-serif', background: colors.background, color: colors.text, minHeight: '100vh' },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 32,
   },
-  title: { margin: 0, fontSize: 32, color: '#ffffff' },
+  title: { margin: 0, fontSize: 32, color: colors.text },
   userInfo: {
     display: 'flex',
     alignItems: 'center',
     gap: 16,
-    color: '#cbd5e1',
+    color: colors.text,
   },
   eventsGrid: {
     display: 'grid',
@@ -100,45 +110,35 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 24,
   },
   eventCard: {
-    border: '1px solid #334155',
+    border: `1px solid ${colors.border}`,
     borderRadius: 12,
     padding: 24,
-    background: '#1e293b',
+    background: colors.surface,
   },
   eventInfo: { marginBottom: 20 },
-  eventName: { margin: 0, fontSize: 20, color: '#ffffff' },
-  eventArtist: { margin: 4, color: '#94a3b8' },
-  eventVenue: { margin: 4, color: '#cbd5e1' },
-  eventDate: { margin: 4, color: '#94a3b8' },
+  eventName: { margin: 0, fontSize: 20, color: colors.text },
+  eventArtist: { margin: 4, color: colors.muted },
+  eventVenue: { margin: 4, color: colors.text },
+  eventDate: { margin: 4, color: colors.muted },
   statusBadge: {
     display: 'inline-block',
     marginTop: 8,
     padding: '4px 10px',
-    background: '#064e3b',
-    color: '#6ee7b7',
+    background: colors.accent,
+    color: '#15042D',
     borderRadius: 20,
     fontSize: 12,
     fontWeight: 600,
-    border: '1px solid #10b981',
+    border: `1px solid ${colors.border}`,
   },
   viewSeatsBtn: {
     width: '100%',
     padding: 12,
-    background: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
     fontSize: 16,
     fontWeight: 600,
-    cursor: 'pointer',
   },
   logoutBtn: {
-    background: '#ef4444',
-    color: '#ffffff',
-    border: 'none',
     padding: '8px 16px',
-    borderRadius: 6,
-    cursor: 'pointer',
     fontSize: 14,
   },
 };
