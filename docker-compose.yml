@@ -355,6 +355,8 @@ services:
       dockerfile: services/catalog/Dockerfile
     environment:
       PORT: 3000
+      OTEL_SERVICE_NAME: flashtix-catalog
+      OTEL_EXPORTER_JAEGER_ENDPOINT: http://jaeger:14268/api/traces
       CATALOG_DB_HOST: catalog-db
       CATALOG_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       CATALOG_CACHE_URL: redis://catalog-cache:6379
@@ -368,6 +370,8 @@ services:
         condition: service_healthy
       rabbitmq-init:
         condition: service_completed_successfully
+      jaeger:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 10s
@@ -383,6 +387,8 @@ services:
       dockerfile: services/reservation/Dockerfile
     environment:
       PORT: 3000
+      OTEL_SERVICE_NAME: flashtix-reservation
+      OTEL_EXPORTER_JAEGER_ENDPOINT: http://jaeger:14268/api/traces
       HOLD_STORE_URL: redis://hold-store:6379
       HOLD_TTL_SECONDS: 600
       HOLD_LOCK_SECONDS: 300
@@ -397,6 +403,8 @@ services:
         condition: service_healthy
       rabbitmq-init:
         condition: service_completed_successfully
+      jaeger:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 10s
@@ -413,6 +421,8 @@ services:
       dockerfile: services/order/Dockerfile
     environment:
       PORT: 3000
+      OTEL_SERVICE_NAME: flashtix-order
+      OTEL_EXPORTER_JAEGER_ENDPOINT: http://jaeger:14268/api/traces
       BOOKING_DB_HOST: booking-db
       BOOKING_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
@@ -428,6 +438,8 @@ services:
       reservation:
         condition: service_healthy
       catalog:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
@@ -445,6 +457,8 @@ services:
       dockerfile: services/waiting-room/Dockerfile
     environment:
       PORT: 3000
+      OTEL_SERVICE_NAME: flashtix-waiting-room
+      OTEL_EXPORTER_JAEGER_ENDPOINT: http://jaeger:14268/api/traces
       HOLD_STORE_URL: redis://hold-store:6379
       CATALOG_URL: http://catalog:3000
       ADMISSION_TOKEN_SECRET: ${ADMISSION_TOKEN_SECRET}
@@ -457,6 +471,8 @@ services:
       hold-store:
         condition: service_healthy
       catalog:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
@@ -475,6 +491,8 @@ services:
       dockerfile: services/payment-worker/Dockerfile
     environment:
       PORT: 3000
+      OTEL_SERVICE_NAME: flashtix-payment-worker
+      OTEL_EXPORTER_JAEGER_ENDPOINT: http://jaeger:14268/api/traces
       PAYMENT_DB_HOST: payment-db
       PAYMENT_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
@@ -490,6 +508,8 @@ services:
       rabbitmq-init:
         condition: service_completed_successfully
       payment-gateway-mock:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
@@ -508,6 +528,8 @@ services:
       dockerfile: services/ticket/Dockerfile
     environment:
       PORT: 3000
+      OTEL_SERVICE_NAME: flashtix-ticket
+      OTEL_EXPORTER_JAEGER_ENDPOINT: http://jaeger:14268/api/traces
       TICKET_DB_HOST: ticket-db
       TICKET_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
@@ -528,6 +550,8 @@ services:
         condition: service_completed_successfully
       catalog:
         condition: service_healthy
+      jaeger:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 10s
@@ -545,6 +569,8 @@ services:
       dockerfile: services/notification/Dockerfile
     environment:
       PORT: 3000
+      OTEL_SERVICE_NAME: flashtix-notification
+      OTEL_EXPORTER_JAEGER_ENDPOINT: http://jaeger:14268/api/traces
       NOTIFICATION_DB_HOST: notification-db
       NOTIFICATION_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
@@ -564,12 +590,36 @@ services:
         condition: service_completed_successfully
       mailpit:
         condition: service_healthy
+      jaeger:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 15s
+    networks: [flashtix-net]
+
+  # --- Jaeger Distributed Tracing --------------------------------------------------
+  # Jaeger all-in-one: collector, agent, query UI. Receives spans from every
+  # FlashTix service via OpenTelemetry. UI available at http://localhost:16686.
+  jaeger:
+    image: jaegertracing/all-in-one:1.47
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "14268:14268"   # HTTP collector (OTLP/Jaeger HTTP)
+      - "14250:14250"   # gRPC collector
+      - "5778:5778"     # agent configs (sampling)
+      - "6831:6831/udp" # Thrift UDP (compact)
+      - "6832:6832/udp" # Thrift UDP (binary)
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: "9411"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:16686/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     networks: [flashtix-net]
 
   # --- Observability Stack (Phase 4) ----------------------------------------------
