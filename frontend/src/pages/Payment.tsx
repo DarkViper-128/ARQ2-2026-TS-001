@@ -65,7 +65,9 @@ export default function Payment() {
     try {
       const storedOrder = JSON.parse(stored);
       const orderId = storedOrder.orderId;
-      eventSource = new EventSource(`/v1/orders/${orderId}/events`);
+      // EventSource cannot send headers, so the token travels as the `jwt` query
+      // argument. Kong verifies it there exactly as it does in the header.
+      eventSource = new EventSource(`/v1/orders/${orderId}/events?jwt=${token}`);
       eventSource.onmessage = (evt) => {
         try {
           const update = JSON.parse(evt.data);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, useAuth } from '../lib/api';
 import { Button } from '../components/Button';
@@ -136,6 +136,30 @@ export default function EventSeats() {
   if (error) return <div style={styles.error}>Error: {error}</div>;
   if (!event) return <div style={styles.empty}>Evento no encontrado</div>;
 
+  // The catalog returns a flat list; the screen needs it as a map: section, then row.
+  const sections = useMemo(() => {
+    const bySection = new Map<string, Map<string, Seat[]>>();
+    for (const seat of seats) {
+      let rows = bySection.get(seat.section);
+      if (!rows) bySection.set(seat.section, (rows = new Map()));
+      const row = rows.get(seat.row);
+      if (row) row.push(seat);
+      else rows.set(seat.row, [seat]);
+    }
+    return [...bySection.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, rows]) => {
+        const sorted = [...rows.entries()].sort(([a], [b]) => a.localeCompare(b));
+        for (const [, list] of sorted) list.sort((a, b) => a.number.localeCompare(b.number));
+        return {
+          name,
+          category: sorted[0]?.[1][0]?.category ?? '',
+          columns: (sorted[0]?.[1] ?? []).map((seat) => seat.number),
+          rows: sorted.map(([rowName, list]) => ({ name: rowName, seats: list })),
+        };
+      });
+  }, [seats]);
+
   const total = selectedSeats.length * PRICE_PER_TICKET;
   const takenCount = seats.filter((s) => s.status !== 'AVAILABLE').length;
 
@@ -168,32 +192,48 @@ export default function EventSeats() {
 
         <div style={styles.seatMapWrapper}>
           <div style={styles.stageLabel}>ESCENARIO</div>
-          <div style={styles.seatMap}>
-            {seats.map((seat) => {
-              const selected = isSelected(seat.seatId);
-              const taken = seat.status !== 'AVAILABLE';
-              const hover = !taken && !loading && hoveredSeat === seat.seatId;
-              return (
-                <button
-                  key={seat.seatId}
-                  onClick={taken ? undefined : () => toggleSeat(seat.seatId)}
-                  onMouseEnter={taken || loading ? undefined : () => setHoveredSeat(seat.seatId)}
-                  onMouseLeave={taken || loading ? undefined : () => setHoveredSeat(null)}
-                  disabled={taken || loading}
-                  style={{
-                    ...styles.seatBtn,
-                    ...(selected ? styles.seatSelected : {}),
-                    ...(taken ? styles.seatTaken : {}),
-                    ...(hover ? { transform: 'translateY(-1px)', opacity: 0.92 } : {}),
-                    transition: 'transform 0.15s, opacity 0.15s',
-                  }}
-                  title={`Asiento ${seat.seatId} (${seat.category}) - ${seat.status}`}
-                >
-                  {seat.number}
-                </button>
-              );
-            })}
-          </div>
+          {sections.map((section) => (
+            <div key={section.name} style={styles.section}>
+              <div style={styles.sectionHeader}>
+                Sección {section.name} · {section.category}
+              </div>
+              <div style={styles.colHeader}>
+                <span style={styles.rowLabel} />
+                {section.columns.map((col) => (
+                  <span key={col} style={styles.colLabel}>{col}</span>
+                ))}
+              </div>
+              {section.rows.map((row) => (
+                <div key={row.name} style={styles.seatRow}>
+                  <span style={styles.rowLabel}>Fila {row.name}</span>
+                  {row.seats.map((seat) => {
+                    const selected = isSelected(seat.seatId);
+                    const taken = seat.status !== 'AVAILABLE';
+                    const hover = !taken && !loading && hoveredSeat === seat.seatId;
+                    return (
+                      <button
+                        key={seat.seatId}
+                        onClick={taken ? undefined : () => toggleSeat(seat.seatId)}
+                        onMouseEnter={taken || loading ? undefined : () => setHoveredSeat(seat.seatId)}
+                        onMouseLeave={taken || loading ? undefined : () => setHoveredSeat(null)}
+                        disabled={taken || loading}
+                        style={{
+                          ...styles.seatBtn,
+                          ...(selected ? styles.seatSelected : {}),
+                          ...(taken ? styles.seatTaken : {}),
+                          ...(hover ? { transform: 'translateY(-1px)', opacity: 0.92 } : {}),
+                          transition: 'transform 0.15s, opacity 0.15s',
+                        }}
+                        title={`Asiento ${seat.seatId} · ${seat.category} · ${seat.status}`}
+                      >
+                        {seat.number}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
 
         <div style={styles.legend}>
@@ -331,6 +371,31 @@ const styles: Record<string, React.CSSProperties> = {
     borderColor: colors.muted,
     color: '#6b7280',
     cursor: 'not-allowed',
+  },
+  section: { marginBottom: 18 },
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: 700,
+    letterSpacing: 0.5,
+    color: colors.muted,
+    textTransform: 'uppercase',
+    margin: '14px 0 8px 0',
+  },
+  colHeader: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 },
+  colLabel: {
+    width: 34,
+    textAlign: 'center',
+    fontSize: 10,
+    color: colors.muted,
+  },
+  seatRow: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 },
+  rowLabel: {
+    width: 56,
+    flexShrink: 0,
+    fontSize: 11,
+    color: colors.muted,
+    textAlign: 'right',
+    paddingRight: 6,
   },
   legend: {
     display: 'flex',
