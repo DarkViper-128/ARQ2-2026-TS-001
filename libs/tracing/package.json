@@ -1,0 +1,26 @@
+{
+  "name": "@flashtix/tracing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenTelemetry tracing with Jaeger exporter for FlashTix services",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.52.1",
+    "@opentelemetry/exporter-jaeger": "^1.9.0",
+    "@opentelemetry/resources": "^1.25.0",
+    "@opentelemetry/sdk-node": "^0.52.1",
+    "@opentelemetry/semantic-conventions": "^1.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.6.3"
+  }
+}
