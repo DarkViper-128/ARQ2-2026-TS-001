@@ -90,13 +90,33 @@ FlashTix instruments every service with **OpenTelemetry** and exports traces to 
 | Component | Image | Ports | Purpose |
 | Jaeger all-in-one | `jaegertracing/all-in-one:1.47` | 16686 (UI), 14268 (collector HTTP), 14250 (gRPC), 5778 (agent), 6831/6832 (Thrift UDP) | Collects, stores and visualizes distributed traces |
 
+### Environment variables
+
+| Variable | Default | Purpose |
+| `OTEL_SERVICE_NAME` | `flashtix-service` | Logical service name used to group spans in Jaeger (one per microservice: `catalog`, `waiting-room`, `reservation`, `order`, `payment-worker`, `ticket`, `notification`) |
+| `OTEL_EXPORTER_JAEGER_ENDPOINT` | `http://jaeger:14268/api/traces` | HTTP endpoint where spans are exported (Jaeger collector inside Docker Compose network) |
+| `NODE_ENV` | `development` | Deployment environment; in production the console exporter is disabled |
+
 ### How it works
 
-1. Each service initializes the OpenTelemetry SDK at bootstrap (`libs/tracing`) with `initTracing({ serviceName })`.
-2. The `x-correlation-id` header (already propagated through HTTP and RabbitMQ envelopes) is mapped to the W3C `traceparent` context, so spans across services are linked into a single trace.
-3. Automatic instrumentations capture: incoming HTTP requests, outgoing HTTP calls (catalog, reservation, payment gateway), RabbitMQ publish/consume (amqplib), MySQL queries (mysql2) and Redis commands (ioredis).
+1. Each service initializes the OpenTelemetry SDK at bootstrap (`libs/tracing`) with `initTracing({ serviceName })` before the NestJS app starts.
+2. The `x-correlation-id` header (already propagated through HTTP and RabbitMQ envelopes) is mapped to the W3C `traceparent` context, so spans across services are linked into a single distributed trace.
+3. Automatic instrumentations capture: incoming HTTP requests, outgoing HTTP calls (Express), RabbitMQ publish/consume (amqplib), MySQL queries (mysql2) and Redis commands (ioredis).
 4. Spans are exported to Jaeger's HTTP collector at `http://jaeger:14268/api/traces` via the `OTEL_EXPORTER_JAEGER_ENDPOINT` env var.
 5. The Jaeger service is declared in `docker-compose.yml` and every service declares `depends_on: jaeger` (condition: `service_healthy`) plus the env vars `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_JAEGER_ENDPOINT`.
+
+### Accessing the Jaeger UI
+
+After `docker compose up -d`, open **http://localhost:16686** in a browser.
+
+### Navigating Jaeger
+
+1. **Service** — select a service from the dropdown (for example `catalog`, `order`, `payment-worker`, etc.). All 7 FlashTix microservices appear here once they have exported at least one span.
+2. **Operation** — after choosing a service, select an operation (HTTP endpoint or message consumer), for example `POST /v1/orders` or `amqplib publish`.
+3. **Lookback** — choose the time window to search (last 15 min, 1 hour, etc.).
+4. **Find Traces** — click to list traces matching the selected service, operation and time window.
+5. **Trace detail** — click a trace to see all its spans as a timeline or dependency graph. Each span shows: service name, operation, start time, duration, tags and logs.
+6. **Cross-service trace** — because all spans share the same `traceId` (derived from `x-correlation-id`), a single fan purchase appears as one trace with spans across multiple services (gateway → catalog → reservation → order → payment-worker → ticket → notification).
 
 ### Trace flow example
 
@@ -105,6 +125,13 @@ A fan purchase produces a single trace with spans:
 - `HTTP POST /v1/orders` (Order Service) → `HTTP POST /v1/holds` (Reservation) → `Redis SETNX seat:...` → `AMQP publish order.created` → `Payment Worker` → `HTTP POST payment-gateway-mock` → `Ticket Service` → `S3 PUT ticket.pdf` → `Notification Worker` → `SMTP mailpit`.
 
 All spans share the same `traceId`, derived from the original `x-correlation-id`.
+
+### Verification
+
+- Confirm Jaeger is healthy: `docker compose ps jaeger` → `healthy`
+- Confirm the UI loads: open `http://localhost:16686`
+- Confirm services appear: run a purchase flow end-to-end, then open Jaeger → Service dropdown → you should see `catalog`, `waiting-room`, `reservation`, `order`, `payment-worker`, `ticket`, `notification`
+- Confirm cross-service traces: open any trace from `order` and verify it contains spans from multiple services with the same `traceId`
 
 ---
 
