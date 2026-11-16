@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { EventPublisher } from '@flashtix/shared';
+import { paymentsTotal } from '@flashtix/shared';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { type CallResult, GatewayClient, type GatewayCharge } from '../gateway/gateway.client';
 import { EVENT_PUBLISHER, MYSQL } from '../tokens';
@@ -116,6 +117,7 @@ export class PaymentsService {
           WHERE order_id = ?`,
         [attempts, result.value.paymentId, result.value.gatewayReference, request.orderId],
       );
+      paymentsTotal.inc({ outcome: 'succeeded', reason: '' });
     } else {
       const reason: FailureReason =
         result.kind === 'declined'
@@ -128,6 +130,7 @@ export class PaymentsService {
           WHERE order_id = ?`,
         [reason, attempts, result.kind === 'retryable' ? result.detail.slice(0, 255) : 'card declined', request.orderId],
       );
+      paymentsTotal.inc({ outcome: 'failed', reason });
     }
 
     await this.publishResult((await this.load(request.orderId))!);

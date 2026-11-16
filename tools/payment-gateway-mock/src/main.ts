@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { Registry, collectDefaultMetrics, Counter, Histogram } from 'prom-client';
 import {
   AppError,
   CORRELATION_ID_HEADER,
@@ -8,6 +9,24 @@ import {
   toProblemDetails,
 } from '@flashtix/shared';
 import { applyConfigPatch, configFromEnv, type MockConfig } from './config';
+
+const metricsRegistry = new Registry();
+metricsRegistry.setDefaultLabels({ service: 'payment-gateway-mock' });
+collectDefaultMetrics({ register: metricsRegistry, prefix: 'nodejs_' });
+
+const gatewayChargesTotal = new Counter({
+  name: 'gateway_charges_total',
+  help: 'Total gateway charges by outcome',
+  labelNames: ['outcome'],
+});
+const gatewayChargeDurationSeconds = new Histogram({
+  name: 'gateway_charge_duration_seconds',
+  help: 'Gateway charge duration in seconds',
+  labelNames: ['outcome'],
+  buckets: [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15, 20, 30, 60],
+});
+metricsRegistry.registerMetric(gatewayChargesTotal);
+metricsRegistry.registerMetric(gatewayChargeDurationSeconds);
 
 /**
  * Mock of the legacy payment gateway (Wave 2, INF-5).
@@ -89,6 +108,7 @@ async function charge(
   response: ServerResponse,
   correlationId: string,
 ): Promise<void> {
+  const start = Date.now();
   const body = await readJson(request);
   const orderId = typeof body.orderId === 'string' ? body.orderId : undefined;
   if (!orderId) throw new AppError('VALIDATION_ERROR', 'orderId is required');
@@ -103,15 +123,22 @@ async function charge(
 
   const outcome = pickOutcome(request.headers['x-mock-behavior'] as string | undefined);
   await sleep(latencyFor(outcome));
+  const duration = (Date.now() - start) / 1000;
 
   if (outcome === 'timeout') {
     // Never answer: the caller must hit its own timeout and retry. The socket is left open.
+    gatewayChargesTotal.inc({ outcome: 'timeout' });
+    gatewayChargeDurationSeconds.observe({ outcome: 'timeout' }, duration);
     return;
   }
   if (outcome === 'error') {
+    gatewayChargesTotal.inc({ outcome: 'error' });
+    gatewayChargeDurationSeconds.observe({ outcome: 'error' }, duration);
     throw new AppError('SERVICE_UNAVAILABLE', 'Gateway temporarily unavailable');
   }
   if (outcome === 'decline') {
+    gatewayChargesTotal.inc({ outcome: 'declined' });
+    gatewayChargeDurationSeconds.observe({ outcome: 'declined' }, duration);
     send(
       response,
       402,
@@ -128,6 +155,9 @@ async function charge(
     );
     return;
   }
+
+  gatewayChargesTotal.inc({ outcome: 'succeeded' });
+  gatewayChargeDurationSeconds.observe({ outcome: 'succeeded' }, duration);
 
   const payment: Payment = {
     paymentId: randomUUID(),
@@ -158,6 +188,12 @@ const server = createServer((request, response) => {
     try {
       if (method === 'GET' && path === '/health') {
         send(response, 200, { status: 'ok' }, correlationId);
+        return;
+      }
+      if (method === 'GET' && path === '/metrics') {
+        const body = await metricsRegistry.metrics();
+        response.setHeader('content-type', metricsRegistry.contentType);
+        response.end(body);
         return;
       }
       if (method === 'GET' && path === '/_mock/config') {

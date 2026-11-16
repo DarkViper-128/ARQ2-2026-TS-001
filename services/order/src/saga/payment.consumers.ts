@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { EventConsumer, type EventEnvelope, claimEvent, queueName } from '@flashtix/shared';
+import { EventConsumer, type EventEnvelope, claimEvent, ordersTotal, queueName } from '@flashtix/shared';
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { addToOutbox, inTransaction } from '../outbox/outbox';
 import { OutboxRelay } from '../outbox/outbox.relay';
@@ -152,6 +152,7 @@ export class PaymentConsumers implements OnModuleInit, OnModuleDestroy {
           },
         });
         this.logger.log(`order ${order.order_id} CONFIRMED`);
+        ordersTotal.inc({ state: 'CONFIRMED' });
       });
     } catch (error) {
       if (!isSeatConflict(error)) throw error;
@@ -186,6 +187,7 @@ export class PaymentConsumers implements OnModuleInit, OnModuleDestroy {
         },
       });
       this.logger.warn(`order ${order.order_id} hit a sold seat after payment: REFUND_PENDING`);
+      ordersTotal.inc({ state: 'REFUND_PENDING' });
     });
   }
 
@@ -217,6 +219,7 @@ export class PaymentConsumers implements OnModuleInit, OnModuleDestroy {
         },
       });
       this.logger.log(`order ${order.order_id} FAILED (${reason})`);
+      ordersTotal.inc({ state: 'FAILED' });
     });
   }
 
@@ -247,6 +250,7 @@ export class PaymentConsumers implements OnModuleInit, OnModuleDestroy {
         },
       });
       this.logger.log(`order ${order.order_id} CANCELLED after refund`);
+      ordersTotal.inc({ state: 'CANCELLED' });
     });
   }
 

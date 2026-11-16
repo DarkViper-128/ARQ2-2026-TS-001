@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { AppError } from '@flashtix/shared';
+import { AppError, ordersTotal } from '@flashtix/shared';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import { CatalogClient } from '../clients/catalog.client';
 import { ReservationClient } from '../clients/reservation.client';
@@ -113,6 +113,7 @@ export class OrdersService {
     }
 
     this.relay.kick();
+    ordersTotal.inc({ state: 'PENDING' });
     this.logger.log(`order ${orderId} created (PENDING) for ${seats.length} seat(s)`);
     return { replayed: false, body: this.acceptedBody(orderId, total, currency) };
   }

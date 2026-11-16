@@ -7,6 +7,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import EventSeats from './pages/EventSeats';
 import Hold from './pages/Hold';
 import Order from './pages/Order';
+import Payment from './pages/Payment';
 import Orders from './pages/Orders';
 import Tickets from './pages/Tickets';
 
@@ -41,6 +42,7 @@ function App() {
             <Route path="/events/:eventId/seats" element={<EventSeats />} />
             <Route path="/hold" element={<Hold />} />
             <Route path="/order" element={<Order />} />
+            <Route path="/payment" element={<Payment />} />
             <Route path="/tickets" element={<Tickets />} />
             <Route path="/orders" element={<Orders />} />
             <Route

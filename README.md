@@ -132,6 +132,19 @@ New ADRs start from [`docs/adrs/000-template.md`](docs/adrs/000-template.md).
 - **Wave 1 - Planning, Design and Specification (done):** Tech Spec (DDD analysis, C4 container diagram, ADRs) and `docs/spec.md`.
 - **Wave 2 - Execution and Implementation (in progress):** Phase 0 (monorepo skeleton, shared library, RabbitMQ topology, object storage, mail catcher, payment gateway mock), Phase 1 (Keycloak, Kong as the single entry point, Catalog Service, Reservation Service and the first event-driven flow), Phase 2 (Waiting Room, LockHold, Order Service with the checkout saga and transactional outbox, Payment Worker with retries, circuit breaker and refunds), Phase 3 (Ticket Service, Notification Worker, organizer endpoints, role checks and identity headers at the gateway), and Phase 4 (Observability stack: Prometheus, Loki, Grafana, Promtail, Node Exporter, cAdvisor) are complete. All phases are covered by `scripts/smoke-phase1.sh`, `scripts/smoke-phase2.mjs`, `scripts/smoke-phase3.mjs` and `scripts/concurrency-holds.mjs`. Target: containerized services with Docker and Docker Compose, an API Gateway as the single entry point, databases, a message broker, a cache (Redis) and an observability stack (Prometheus, Loki, Grafana).
 
+## Frontend (Wave 2 - Implementation)
+
+The React + Vite frontend lives in `frontend/` and covers the full fan purchase flow and the organizer dashboard:
+
+- **Fan routes:** `/` (catalog), `/events/:eventId/seats` (seat map), `/hold` (reservation), `/order` (payment form), `/payment` (order status via SSE), `/tickets` (digital tickets), `/orders` (order history)
+- **Organizer routes:** `/admin` (dashboard), `/admin/events`, `/admin/create` (create event), `/admin/refunds` (refund by transaction ID)
+- **Theme:** dark mode across all screens (palette documented in `frontend/spec.md`)
+- **Seat map:** visual auditorium grid (up to 100 seats) derived from `event.totalSeats`, individual seat selection, max 6 tickets per purchase
+- **Sidebar:** collapsible navigation with toggle button (72px collapsed / 260px expanded)
+- **Database seed:** `scripts/seed-purchases.mjs` populates booking-db, payment-db and ticket-db with confirmed purchases
+
+See `frontend/spec.md` for the complete frontend specification, color palette, routes, and how to run the dev server.
+
 ## Conventions
 
 - All deliverables (Tech Spec, `spec.md`, ADRs, diagram labels, code, comments, README and commit messages) are written in English.

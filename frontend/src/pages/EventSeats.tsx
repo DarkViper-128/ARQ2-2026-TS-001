@@ -1,18 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, useAuth } from '../lib/api';
-
-interface Seat {
-  seatId: string;
-  category: string;
-  status: 'AVAILABLE' | 'HELD' | 'SOLD';
-}
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 interface Event {
   eventId: string;
   name: string;
   artist: string;
+  venue: { name: string; city: string };
+  startsAt: string;
+  saleStartsAt: string;
+  status: string;
+  totalSeats?: number;
 }
+
+interface Seat {
+  id: string;
+  number: string;
+  status: 'available' | 'selected' | 'taken';
+}
+
+const PRICE_PER_TICKET = 100; // 100 pesos por boleta
+const MAX_TICKETS = 6;
+const COLS = 10; // 10 columnas x 10 filas = 100 asientos del auditorio
 
 export default function EventSeats() {
   const { eventId } = useParams();
@@ -20,51 +31,64 @@ export default function EventSeats() {
   const navigate = useNavigate();
   const [event, setEvent] = useState<Event | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [hoveredSeat, setHoveredSeat] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     if (!eventId) return;
     api.get(`/events/${eventId}`, token)
-      .then((data: Event) => setEvent(data))
+      .then((data: Event) => {
+        setEvent(data);
+        const total = data.totalSeats || 100;
+        const seatCount = Math.min(total, 100);
+        const initial: Seat[] = [];
+        for (let i = 1; i <= seatCount; i++) {
+          initial.push({ id: `seat-${i}`, number: `A-${String(i).padStart(3, '0')}`, status: 'available' });
+        }
+        setSeats(initial);
+      })
       .catch((err: Error) => setError(err.message));
-
-    api.get(`/events/${eventId}/seats`, token)
-      .then((data: Seat[]) => setSeats(data))
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
   }, [eventId, token]);
 
   const toggleSeat = (seatId: string) => {
-    setSelected((prev) =>
-      prev.includes(seatId) ? prev.filter((s) => s !== seatId) : [...prev, seatId],
+    setSelectedSeats((prev) =>
+      prev.includes(seatId) ? prev.filter((id) => id !== seatId) : [...prev, seatId]
     );
   };
 
+  const isSelected = (seatId: string) => selectedSeats.includes(seatId);
+
   /** WR-3: joins the virtual queue and polls until the fan is ADMITTED. */
-  const waitForAdmission = async (ticketId: string): Promise<string> => {
+  const waitForAdmission = useCallback(async (ticketId: string): Promise<string> => {
     for (let i = 0; i < 30; i++) {
       const turn = await api.get(`/events/${eventId}/queue/${ticketId}`, token);
       if ((turn as any).status === 'ADMITTED') return (turn as any).admissionToken;
       await new Promise((r) => setTimeout(r, 1000));
     }
     throw new Error('La cola virtual no te admitió a tiempo. Intenta de nuevo.');
-  };
+  }, [eventId, token]);
 
-  const handleHold = async (e: React.FormEvent) => {
+  const handleBuy = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selected.length === 0 || selected.length > 6) {
-      setMessage('Selecciona entre 1 y 6 asientos');
+    setLoading(true);
+    setError('');
+    setMessage('');
+
+    if (selectedSeats.length === 0) {
+      setError('Selecciona al menos un asiento.');
+      setLoading(false);
+      return;
+    }
+    if (selectedSeats.length > MAX_TICKETS) {
+      setError(`Máximo ${MAX_TICKETS} boletas por compra.`);
+      setLoading(false);
       return;
     }
 
     try {
-      setLoading(true);
-      setError('');
-      setMessage('');
-
       // 1. Join the virtual queue
       const queueRes = await api.post(`/events/${eventId}/queue`, {}, token);
       const ticketId = (queueRes as any).queueTicketId;
@@ -73,17 +97,19 @@ export default function EventSeats() {
       // 2. Wait until ADMITTED to get the admission token
       const admissionToken = await waitForAdmission(ticketId);
 
-      // 3. Create the hold WITH the admission token (the gateway requires it)
+      // 3. Create the hold with the selected seats
       const holdRes = await api.postWithHeaders(
         '/holds',
-        { eventId, seatIds: selected },
+        { eventId, seatIds: selectedSeats },
         { 'X-Admission-Token': admissionToken },
         token,
       );
 
       localStorage.setItem('flashtix_hold', JSON.stringify(holdRes));
       localStorage.setItem('flashtix_admission_token', admissionToken);
-      navigate('/hold');
+
+      // 4. Pasarela de pago (Order -> Payment)
+      navigate('/order');
     } catch (err: any) {
       setError(err.message || 'No se pudo crear la reserva');
     } finally {
@@ -91,86 +117,110 @@ export default function EventSeats() {
     }
   };
 
-  if (loading) return <div>Cargando asientos...</div>;
-  if (error) return <div>Error: {error}</div>;
-  if (!event) return <div>Evento no encontrado</div>;
+  if (loading) {
+    return (
+      <div style={styles.loader}>
+        <div>Procesando reserva…</div>
+      </div>
+    );
+  }
+  if (error) return <div style={styles.error}>Error: {error}</div>;
+  if (!event) return <div style={styles.empty}>Evento no encontrado</div>;
 
-  const available = seats.filter((s) => s.status === 'AVAILABLE');
-  const held = seats.filter((s) => s.status === 'HELD');
-  const sold = seats.filter((s) => s.status === 'SOLD');
+  const total = selectedSeats.length * PRICE_PER_TICKET;
+  const takenCount = seats.filter((s) => s.status === 'taken').length;
 
   return (
     <div style={styles.container}>
       <nav style={styles.nav}>
-        <button onClick={() => navigate('/')} style={styles.backBtn}>← Eventos</button>
+        <Button type="button" onClick={() => navigate('/')} variant="ghost" style={styles.backBtn}>← Eventos</Button>
         <h1 style={styles.title}>{event.name}</h1>
       </nav>
 
-      <div style={styles.stats}>
-        <div style={styles.statBox}>
-          <div style={styles.statValue}>{available.length}</div>
-          <div style={styles.statLabel}>Disponibles</div>
-        </div>
-        <div style={styles.statBox}>
-          <div style={styles.statValue}>{held.length}</div>
-          <div style={styles.statLabel}>Retenidos</div>
-        </div>
-        <div style={styles.statBox}>
-          <div style={styles.statValue}>{sold.length}</div>
-          <div style={styles.statLabel}>Vendidos</div>
-        </div>
+      <div style={styles.eventInfo}>
+        <strong>{event.artist}</strong>
+        <span> · {event.venue.name}, {event.venue.city}</span>
       </div>
 
-      <div style={styles.seatMap}>
-        {seats.map((seat) => {
-          const isSelected = selected.includes(seat.seatId);
-          let color = '#10b981';
-          if (seat.status === 'HELD') color = '#f59e0b';
-          if (seat.status === 'SOLD') color = '#9ca3af';
+      <div style={styles.card}>
+        <h2 style={styles.sectionTitle}>Selecciona tus asientos</h2>
+        <p style={styles.availableText}>
+          Asientos del auditorio: <strong>{seats.length}</strong> &nbsp;|&nbsp;
+          Seleccionados: <strong>{selectedSeats.length}</strong> &nbsp;|&nbsp;
+          Ocupados: <strong>{takenCount}</strong>
+        </p>
 
-          return (
-            <div
-              key={seat.seatId}
-              style={{
-                ...styles.seat,
-                background: isSelected ? '#2563eb' : color,
-                border: isSelected ? '2px solid #1d4ed8' : '1px solid #9ca3af',
-              }}
-              onClick={
-                seat.status === 'AVAILABLE' ? () => toggleSeat(seat.seatId) : undefined
-              }
-              title={`${seat.seatId} — ${seat.category} — ${seat.status}`}
-            >
-              {seat.seatId.replace(/^.*-/, '')}
-            </div>
-          );
-        })}
-      </div>
-
-      {message && <div style={styles.message}>{message}</div>}
-      {error && <div style={styles.error}>{error}</div>}
-
-      <div style={styles.summary}>
-        <div>
-          <strong>Seleccionados:</strong> {selected.length}
+        <div style={styles.priceBox}>
+          <span style={styles.priceLabel}>Precio por boleta:</span>
+          <span style={styles.priceValue}>
+            {PRICE_PER_TICKET.toLocaleString('es-CO', { style: 'currency', currency: 'COP' })}
+          </span>
         </div>
-        <div>
-          <strong>Total:</strong> {selected.length} asiento(s)
+
+        <div style={styles.seatMapWrapper}>
+          <div style={styles.stageLabel}>ESCENARIO</div>
+          <div style={styles.seatMap}>
+            {seats.map((seat) => {
+              const selected = isSelected(seat.id);
+              const taken = seat.status === 'taken';
+              const hover = !taken && !loading && hoveredSeat === seat.id;
+              return (
+                <button
+                  key={seat.id}
+                  onClick={taken ? undefined : () => toggleSeat(seat.id)}
+                  onMouseEnter={taken || loading ? undefined : () => setHoveredSeat(seat.id)}
+                  onMouseLeave={taken || loading ? undefined : () => setHoveredSeat(null)}
+                  disabled={taken || loading}
+                  style={{
+                    ...styles.seatBtn,
+                    ...(selected ? styles.seatSelected : {}),
+                    ...(taken ? styles.seatTaken : {}),
+                    ...(hover ? { transform: 'translateY(-1px)', opacity: 0.92 } : {}),
+                    transition: 'transform 0.15s, opacity 0.15s',
+                  }}
+                  title={`Asiento ${seat.number}`}
+                >
+                  {seat.number.slice(-3)}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <button
-          onClick={handleHold}
-          disabled={selected.length === 0 || selected.length > 6}
-          style={styles.holdBtn}
+
+        <div style={styles.legend}>
+          <span style={getLegendItemStyle(false, false)}>Disponible</span>
+          <span style={getLegendItemStyle(true, false)}>Seleccionado</span>
+          <span style={getLegendItemStyle(false, true)}>Ocupado</span>
+        </div>
+
+        <div style={styles.totalBox}>
+          <span style={styles.totalLabel}>Total a pagar:</span>
+          <span style={styles.totalValue}>
+            {total.toLocaleString('es-CO', { style: 'currency', currency: 'COP' })}
+          </span>
+        </div>
+
+        {message && <div style={styles.message}>{message}</div>}
+        {error && <div style={styles.error}>{error}</div>}
+
+        <Button
+          onClick={handleBuy}
+          disabled={loading || selectedSeats.length === 0 || selectedSeats.length > MAX_TICKETS}
+          variant="primary"
+          style={styles.buyBtn}
         >
-          Reservar asientos
-        </button>
+          {loading ? 'Procesando…' : 'Continuar al pago'}
+        </Button>
+        <p style={styles.hint}>
+          Máximo {MAX_TICKETS} boletas por compra. Haz clic en un asiento para seleccionarlo o deseleccionarlo.
+        </p>
       </div>
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 24, fontFamily: 'system-ui, sans-serif' },
+  container: { padding: 32, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', maxWidth: 1200, margin: '0 auto', background: colors.background, color: colors.text },
   nav: {
     display: 'flex',
     alignItems: 'center',
@@ -178,73 +228,175 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 32,
   },
   backBtn: {
-    background: 'none',
-    border: '1px solid #d1d5db',
-    padding: '8px 16px',
-    borderRadius: 6,
-    cursor: 'pointer',
-    fontSize: 14,
-  },
-  title: { margin: 0, fontSize: 28, color: '#111827' },
-  stats: {
-    display: 'flex',
-    gap: 16,
-    marginBottom: 32,
-  },
-  statBox: {
-    padding: 16,
-    background: '#f3f4f6',
-    borderRadius: 8,
-    minWidth: 100,
-    textAlign: 'center',
-  },
-  statValue: { fontSize: 24, fontWeight: 700, color: '#111827' },
-  statLabel: { fontSize: 12, color: '#6b7280' },
-  seatMap: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(10, 40px)',
-    gap: 12,
-    marginBottom: 24,
-  },
-  seat: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 12,
+    background: 'transparent',
+    border: 'none',
+    color: colors.muted,
+    fontSize: 15,
     fontWeight: 600,
-    color: '#ffffff',
     cursor: 'pointer',
-    userSelect: 'none',
+    padding: 0,
   },
-  message: {
-    marginBottom: 16,
-    padding: 12,
-    background: '#fef2f2',
-    color: '#dc2626',
-    borderRadius: 6,
+  title: { margin: 0, fontSize: 28, color: colors.text },
+  eventInfo: {
+    marginBottom: 24,
+    padding: 16,
+    background: colors.background,
+    borderRadius: 10,
+    color: colors.muted,
     fontSize: 14,
   },
-  summary: {
+  card: {
+    padding: 40,
+    background: colors.surface,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 16,
+    boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+  },
+  sectionTitle: {
+    margin: '0 0 16px 0',
+    fontSize: 20,
+    color: colors.text,
+    fontWeight: 700,
+  },
+  availableText: {
+    margin: '0 0 24px 0',
+    fontSize: 16,
+    color: colors.muted,
+  },
+  priceBox: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    background: '#ffffff',
-    border: '1px solid #e5e7eb',
-    borderRadius: 8,
+    padding: '16px 0',
+    borderBottom: `1px solid ${colors.border}`,
+    marginBottom: 24,
   },
-  holdBtn: {
-    padding: '12px 24px',
-    background: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
-    fontSize: 16,
+  priceLabel: { fontSize: 16, color: colors.muted },
+  priceValue: { fontSize: 20, fontWeight: 700, color: colors.text },
+  seatMapWrapper: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  stageLabel: {
+    marginBottom: 16,
+    padding: '6px 16px',
+    background: colors.surface,
+    color: colors.muted,
+    borderRadius: 20,
+    fontSize: 12,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    border: `1px solid ${colors.border}`,
+  },
+  seatMap: {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${COLS}, 40px)`,
+    gap: 10,
+    marginBottom: 24,
+    justifyContent: 'center',
+  },
+  seatBtn: {
+    width: 40,
+    height: 40,
+    background: colors.surface,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    color: colors.muted,
+    fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
-    opacity: (() => 1) as unknown as number,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seatSelected: {
+    background: colors.primary,
+    borderColor: colors.primary,
+    color: '#ffffff',
+  },
+  seatTaken: {
+    background: colors.muted,
+    borderColor: colors.muted,
+    color: '#6b7280',
+    cursor: 'not-allowed',
+  },
+  legend: {
+    display: 'flex',
+    gap: 16,
+    marginBottom: 24,
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  totalBox: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px 0',
+    borderBottom: `1px solid ${colors.border}`,
+    marginBottom: 28,
+  },
+  totalLabel: { fontSize: 16, color: colors.muted },
+  totalValue: { fontSize: 22, fontWeight: 800, color: colors.text },
+  message: {
+    marginBottom: 16,
+    padding: 12,
+    background: colors.errorBg,
+    color: colors.error,
+    borderRadius: 6,
+    fontSize: 14,
+    border: `1px solid ${colors.errorBorder}`,
+  },
+  error: {
+    marginBottom: 16,
+    padding: 12,
+    background: colors.errorBg,
+    color: colors.error,
+    borderRadius: 6,
+    fontSize: 14,
+    border: `1px solid ${colors.errorBorder}`,
+  },
+  buyBtn: {
+    width: '100%',
+    padding: '16px 24px',
+    fontSize: 17,
+    fontWeight: 600,
+  },
+  hint: {
+    margin: 0,
+    fontSize: 13,
+    color: colors.muted,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  loader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '60vh',
+    color: colors.muted,
+    fontSize: 18,
+  },
+  empty: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '60vh',
+    color: colors.muted,
+    fontSize: 18,
   },
 };
+
+function getLegendItemStyle(selected: boolean, taken: boolean): React.CSSProperties {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 13,
+    color: colors.muted,
+    ...(selected ? { color: colors.primary } : {}),
+    ...(taken ? { color: colors.muted } : {}),
+  };
+}

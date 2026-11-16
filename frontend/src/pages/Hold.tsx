@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, useAuth } from '../lib/api';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
 
 interface Hold {
   holdId: string;
@@ -55,7 +57,7 @@ export default function Hold() {
   return (
     <div style={styles.container}>
       <nav style={styles.nav}>
-        <button onClick={() => navigate('/')} style={styles.backBtn}>← Catálogo</button>
+        <Button type="button" onClick={() => navigate('/')} variant="ghost" style={styles.backBtn}>← Catálogo</Button>
       </nav>
 
       <h1 style={styles.title}>Tu reserva</h1>
@@ -81,51 +83,52 @@ export default function Hold() {
       {error && <div style={styles.error}>{error}</div>}
 
       <div style={styles.actions}>
-        <button onClick={handleCheckout} style={styles.checkoutBtn}>
+        <Button onClick={handleCheckout} variant="primary" style={styles.checkoutBtn}>
           Continuar al pago
-        </button>
-        <button onClick={handleRelease} style={styles.releaseBtn}>
+        </Button>
+        <Button onClick={handleRelease} variant="danger" style={styles.releaseBtn}>
           Liberar asientos
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 24, fontFamily: 'system-ui, sans-serif' },
+  container: { padding: 24, fontFamily: 'system-ui, sans-serif', background: colors.background, color: colors.text },
   nav: { marginBottom: 32 },
   backBtn: {
-    background: 'none',
-    border: '1px solid #d1d5db',
-    padding: '8px 16px',
-    borderRadius: 6,
+    background: 'transparent',
+    border: 'none',
+    color: colors.muted,
     cursor: 'pointer',
+    padding: 0,
   },
-  title: { fontSize: 28, color: '#111827', marginBottom: 24 },
+  title: { fontSize: 28, color: colors.text, marginBottom: 24 },
   card: {
     padding: 32,
-    background: '#ffffff',
-    border: '1px solid #e5e7eb',
+    background: colors.surface,
+    border: `1px solid ${colors.border}`,
     borderRadius: 12,
     marginBottom: 24,
   },
-  label: { fontSize: 14, color: '#6b7280', marginBottom: 6 },
-  value: { fontSize: 18, color: '#111827', marginBottom: 16 },
+  label: { fontSize: 14, color: colors.muted, marginBottom: 6 },
+  value: { fontSize: 18, color: colors.text, marginBottom: 16 },
   seatList: {
     margin: 0,
     paddingLeft: 20,
-    color: '#374151',
+    color: colors.text,
   },
   seatItem: { marginBottom: 4 },
   status: {
     display: 'inline-block',
     padding: '4px 10px',
-    background: '#dcfce7',
-    color: '#166534',
+    background: colors.background,
+    color: colors.accent,
     borderRadius: 20,
     fontSize: 14,
     fontWeight: 600,
+    border: `1px solid ${colors.border}`,
   },
   actions: {
     display: 'flex',
@@ -133,40 +136,32 @@ const styles: Record<string, React.CSSProperties> = {
   },
   checkoutBtn: {
     padding: '12px 24px',
-    background: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
     fontSize: 16,
     fontWeight: 600,
-    cursor: 'pointer',
     flex: 1,
   },
   releaseBtn: {
     padding: '12px 24px',
-    background: '#ef4444',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
     fontSize: 16,
     fontWeight: 600,
-    cursor: 'pointer',
     flex: 1,
   },
   message: {
     marginBottom: 16,
     padding: 12,
-    background: '#dcfce7',
-    color: '#166534',
+    background: colors.errorBg,
+    color: colors.error,
     borderRadius: 6,
     fontSize: 14,
+    border: `1px solid ${colors.errorBorder}`,
   },
   error: {
     marginBottom: 16,
     padding: 12,
-    background: '#fef2f2',
-    color: '#dc2626',
+    background: colors.errorBg,
+    color: colors.error,
     borderRadius: 6,
     fontSize: 14,
+    border: `1px solid ${colors.errorBorder}`,
   },
 };

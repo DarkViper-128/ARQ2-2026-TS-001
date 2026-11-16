@@ -1,589 +1,995 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { api, useAuth } from '../lib/api';
-import { extractList } from '../lib/apiHelper';
+import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Button } from '../components/Button';
+import { colors } from '../lib/theme';
+
+const API_BASE = '/v1';
 
 interface Event {
-  eventId: string;
+  event_id: string;
   name: string;
+  description: string;
   artist: string;
-  venue: { name: string; city: string };
-  startsAt: string;
-  saleStartsAt: string;
-  status: string;
+  venue_name: string;
+  venue_city: string;
+  starts_at: string;
+  sale_starts_at: string;
+  status: 'DRAFT' | 'PUBLISHED' | 'ON_SALE' | 'SOLD_OUT' | 'CANCELLED';
+  total_seats: number;
+  price_amount: number;
+  created_at: string;
 }
 
 interface Order {
-  orderId: string;
-  userId: string;
-  eventId: string;
-  status: string;
-  total: { amount: number; currency: string };
-  seats: Array<{ seatId: string; category: string }>;
-  createdAt: string;
+  order_id: string;
+  user_id: string;
+  user_email: string;
+  event_id: string;
+  hold_id: string;
+  status: 'PENDING' | 'CONFIRMED' | 'FAILED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
+  total_amount: number;
+  failure_reason: string | null;
+  created_at: string;
 }
 
-const POLL_INTERVAL = 5000;
+interface ErrorLog {
+  operation: string;
+  message: string;
+  timestamp: string;
+}
 
-export default function AdminDashboard() {
-  const { token } = useAuth();
-  const navigate = useNavigate();
+const AdminDashboard: React.FC = () => {
+  const location = useLocation();
+  const [token, setToken] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'events' | 'my-events' | 'orders' | 'monitoring'>('events');
   const [events, setEvents] = useState<Event[]>([]);
+  const [myEvents, setMyEvents] = useState<Event[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [apiErrors, setApiErrors] = useState<Record<string, string>>({});
-
-  // Crear evento form state
+  const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([]);
+  const [stats, setStats] = useState({
+    eventsCreated: 0,
+    eventsPublished: 0,
+    ordersConfirmed: 0,
+    refundsRequested: 0,
+  });
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
     name: '',
     artist: '',
-    venueName: '',
-    venueCity: '',
-    startsAt: '',
-    saleStartsAt: '',
-    priceCategories: JSON.stringify([
-      { category: 'VIP', price: { amount: 45000000, currency: 'COP' } },
-    ]),
-    seats: JSON.stringify([{ seatId: 'A-01-01', category: 'VIP' }]),
+    description: '',
+    totalSeats: '',
+    price: '',
   });
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    totalSeats: '',
+    price: '',
+  });
+  const [message, setMessage] = useState({ text: '', type: 'success' as 'success' | 'error' });
+  const [loading, setLoading] = useState(false);
+  const [refundSearch, setRefundSearch] = useState('');
+  const filteredOrders = orders.filter((o) =>
+    refundSearch === '' || o.order_id.toLowerCase().includes(refundSearch.toLowerCase())
+  );
+
+  // Sincronizar la ruta de la URL con la tab activa (cada ruta = un dashboard)
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === '/admin/refunds') {
+      setActiveTab('orders');
+      setShowCreateForm(false);
+    } else if (path === '/admin/create') {
+      setActiveTab('events');
+      setShowCreateForm(true);
+    } else {
+      // /admin, /admin/events y cualquier otra
+      setActiveTab('events');
+      setShowCreateForm(false);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setInterval>;
+    const t = localStorage.getItem('flashtix_token');
+    if (t) setToken(t);
+  }, []);
 
-    const loadEvents = async () => {
-      try {
-        const data = await api.get('/events', token);
-        const list = extractList<Event>(data);
-        if (!cancelled) setEvents(list);
-        if (!cancelled) setLoading(false);
-        if (!cancelled) setApiErrors((prev) => ({ ...prev, events: '' }));
-      } catch (err: any) {
-        if (!cancelled && err.message === 'UNAUTHENTICATED') {
-          localStorage.removeItem('flashtix_token');
-          localStorage.removeItem('flashtix_user');
-          navigate('/login');
-        } else if (!cancelled) {
-          setApiErrors((prev) => ({ ...prev, events: err.message || 'Error cargando eventos' }));
-          setLoading(false);
-        }
-      }
-    };
+  useEffect(() => {
+    if (!token) return;
+    loadData();
+  }, [token, activeTab]);
 
-    const loadOrders = async () => {
-      try {
-        const data = await api.get('/orders', token);
-        const list = extractList<Order>(data);
-        if (!cancelled) setOrders(list);
-        if (!cancelled) setApiErrors((prev) => ({ ...prev, orders: '' }));
-      } catch (err: any) {
-        if (!cancelled && err.message === 'UNAUTHENTICATED') {
-          localStorage.removeItem('flashtix_token');
-          localStorage.removeItem('flashtix_user');
-          navigate('/login');
-        } else if (!cancelled) {
-          // Órdenes pueden no estar disponibles para organizador (401) — no es crítico
-          setApiErrors((prev) => ({ ...prev, orders: 'Órdenes no disponibles para este rol' }));
-        }
-      }
-    };
-
-    const refresh = () => {
-      loadEvents();
-      loadOrders();
-    };
-
-    refresh();
-    timer = setInterval(refresh, POLL_INTERVAL);
-
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
-  }, [token, navigate]);
-
-  const handlePublish = async (eventId: string) => {
+  const loadData = async () => {
+    setLoading(true);
     try {
-      await api.post(`/admin/events/${eventId}/publish`, {}, token);
-      setSuccess('Evento publicado correctamente');
-      setApiErrors((prev) => ({ ...prev, publish: '' }));
-      const data = await api.get('/events', token);
-      setEvents(extractList<Event>(data));
+      const [eventsData, ordersData] = await Promise.all([
+        (await apiFetch('/events')) as Event[],
+        (await apiFetch('/orders')) as Order[],
+      ]);
+      setEvents(eventsData);
+      setMyEvents(eventsData.filter((e) => e.status !== 'CANCELLED'));
+      setOrders(ordersData);
+
+      setStats({
+        eventsCreated: eventsData.length,
+        eventsPublished: eventsData.filter((e) => e.status === 'PUBLISHED' || e.status === 'ON_SALE').length,
+        ordersConfirmed: ordersData.filter((o) => o.status === 'CONFIRMED').length,
+        refundsRequested: ordersData.filter((o) => o.status === 'REFUND_PENDING' || o.status === 'REFUNDED').length,
+      });
+
+      const failed = ordersData.filter((o) => o.status === 'FAILED' || o.status === 'CANCELLED');
+      setErrorLogs(
+        failed
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 10)
+          .map((o) => ({
+            operation: 'Checkout',
+            message: o.failure_reason || 'Orden cancelada',
+            timestamp: o.created_at,
+          }))
+      );
     } catch (err: any) {
-      setApiErrors((prev) => ({ ...prev, publish: err.message || 'Error al publicar' }));
-      setSuccess('');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteEvent = async (eventId: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este evento?')) return;
-    try {
-      await api.delete(`/admin/events/${eventId}`, token);
-      setSuccess('Evento eliminado correctamente');
-      setApiErrors((prev) => ({ ...prev, delete: '' }));
-      const data = await api.get('/events', token);
-      setEvents(extractList<Event>(data));
-    } catch (err: any) {
-      setApiErrors((prev) => ({ ...prev, delete: err.message || 'Error al eliminar' }));
-      setSuccess('');
+  const apiFetch = async (path: string, options: RequestInit = {}): Promise<any> => {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Error ${res.status}`);
     }
+    return res.json();
   };
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
-    setApiErrors((prev) => ({ ...prev, create: '' }));
-
     try {
-      const body = {
-        name: createForm.name,
-        artist: createForm.artist,
-        venue: { name: createForm.venueName, city: createForm.venueCity },
-        startsAt: createForm.startsAt,
-        saleStartsAt: createForm.saleStartsAt,
-        priceCategories: JSON.parse(createForm.priceCategories),
-        seats: JSON.parse(createForm.seats),
-      };
-
-      await api.post('/admin/events', body, token);
-      setSuccess('Evento creado correctamente');
-      setApiErrors((prev) => ({ ...prev, create: '' }));
-
-      setCreateForm({
-        name: '',
-        artist: '',
-        venueName: '',
-        venueCity: '',
-        startsAt: '',
-        saleStartsAt: '',
-        priceCategories: JSON.stringify([
-          { category: 'VIP', price: { amount: 45000000, currency: 'COP' } },
-        ]),
-        seats: JSON.stringify([{ seatId: 'A-01-01', category: 'VIP' }]),
+      const totalSeats = Math.max(parseInt(createForm.totalSeats) || 10, 1);
+      const seats = Array.from({ length: totalSeats }, (_, i) => {
+        const section = Math.floor(i / 10) + 1;
+        const row = (i % 10) + 1;
+        const seatNumber = (i % 10) + 1;
+        return {
+          seatId: `A-${String(section).padStart(2, '0')}-${String(row).padStart(2, '0')}`,
+          section: 'A',
+          row: String(row).padStart(2, '0'),
+          number: String(seatNumber).padStart(2, '0'),
+          category: 'General',
+        };
       });
-
-      const data = await api.get('/events', token);
-      setEvents(extractList<Event>(data));
-      setLoading(false);
+      await apiFetch('/admin/events', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: createForm.name,
+          artist: createForm.artist || createForm.name,
+          venue: { name: 'Estadio Local', city: 'Bogota' },
+          starts_at: new Date(Date.now() + 86400000 * 30).toISOString(),
+          sale_starts_at: new Date(Date.now() + 86400000).toISOString(),
+          status: 'DRAFT',
+          priceCategories: [{ category: 'General', price: { amount: parseInt(createForm.price) || 100, currency: 'COP' } }],
+          seats,
+        }),
+      });
+      setMessage({ text: 'Evento creado en estado DRAFT', type: 'success' });
+      setCreating(false);
+      setCreateForm({ name: '', artist: '', description: '', totalSeats: '', price: '' });
+      setShowCreateForm(false);
+      loadData();
     } catch (err: any) {
-      setApiErrors((prev) => ({ ...prev, create: err.message || 'Error al crear evento' }));
+      setMessage({ text: err.message || 'Error creando evento', type: 'error' });
+    } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return <div style={styles.loader}>Cargando panel de organizador...</div>;
+  const handlePublish = async (eventId: string) => {
+    setLoading(true);
+    try {
+      await apiFetch(`/admin/events/${eventId}/publish`, { method: 'POST' });
+      setMessage({ text: 'Evento publicado', type: 'success' });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error publicando', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const draftEvents = events.filter((e) => e.status === 'DRAFT');
-  const publishedEvents = events.filter((e) => e.status === 'PUBLISHED');
-  const confirmedOrders = orders.filter((o) => o.status === 'CONFIRMED');
+  const handleUpdateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setLoading(true);
+    try {
+      const seatsCount = Math.max(parseInt(editForm.totalSeats) || 1, 1);
+      await apiFetch(`/admin/events/${editing}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editForm.name,
+          description: editForm.description,
+          priceCategories: [{ category: 'General', price: { amount: parseInt(editForm.price) || 100, currency: 'COP' } }],
+          seats: Array.from({ length: seatsCount }, (_, i) => ({
+            seatId: `A-${Math.floor(i / 10) + 1}-${(i % 10) + 1}`,
+            category: 'General',
+          })),
+        }),
+      });
+      setEditing(null);
+      setMessage({ text: 'Evento actualizado', type: 'success' });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error actualizando evento', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefund = async (orderId: string) => {
+    if (!confirm('¿Seguro que deseas solicitar el reembolso de esta orden?')) return;
+    setLoading(true);
+    try {
+      await apiFetch(`/admin/orders/${orderId}/refund`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: 'EVENT_CANCELLED' }),
+      });
+      setMessage({ text: 'Reembolso solicitado (transaccional)', type: 'success' });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error solicitando reembolso', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const statusColor = (status: string): React.CSSProperties => {
+    switch (status) {
+      case 'PUBLISHED': return { background: colors.accent, color: '#15042D', border: `1px solid ${colors.border}` };
+      case 'ON_SALE': return { background: colors.primary, color: '#ffffff', border: 'none' };
+      case 'DRAFT': return { background: colors.surface, color: colors.text, border: `1px solid ${colors.border}` };
+      case 'CANCELLED': return { background: colors.errorBg, color: colors.error, border: `1px solid ${colors.errorBorder}` };
+      default: return { background: colors.surface, color: colors.muted, border: `1px solid ${colors.border}` };
+    }
+  };
+
+  const orderStatusColor = (status: string): React.CSSProperties => {
+    switch (status) {
+      case 'CONFIRMED': return { background: colors.accent, color: '#15042D', border: `1px solid ${colors.border}` };
+      case 'PENDING': return { background: colors.surface, color: colors.text, border: `1px solid ${colors.border}` };
+      case 'FAILED': return { background: colors.errorBg, color: colors.error, border: `1px solid ${colors.errorBorder}` };
+      case 'CANCELLED': return { background: colors.surface, color: colors.muted, border: `1px solid ${colors.border}` };
+      case 'REFUND_PENDING': return { background: colors.surface, color: colors.text, border: `1px solid ${colors.border}` };
+      case 'REFUNDED': return { background: colors.primary, color: '#ffffff', border: 'none' };
+      default: return { background: colors.surface, color: colors.muted, border: `1px solid ${colors.border}` };
+    }
+  };
 
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <div style={styles.welcome}>
+    <div style={styles.root}>
+      <div style={styles.headerBar}>
+        <div>
           <h1 style={styles.title}>Panel Organizador</h1>
-          <p style={styles.subtitle}>
-            Gestiona tus eventos y visualiza la actividad de la plataforma
-          </p>
+          <p style={styles.subtitle}>Gestiona tus eventos, ordenes y monitorea la plataforma</p>
         </div>
-        <div style={styles.roleChip}>
-          <span style={styles.roleText}>Rol: ORGANIZADOR</span>
-        </div>
-      </header>
-
-      {success && <div style={styles.successBanner}>{success}</div>}
-      {error && <div style={styles.errorBanner}>{error}</div>}
-      {apiErrors.create && <div style={styles.errorBanner}>Crear evento: {apiErrors.create}</div>}
-      {apiErrors.publish && <div style={styles.errorBanner}>Publicar: {apiErrors.publish}</div>}
-      {apiErrors.delete && <div style={styles.errorBanner}>Eliminar: {apiErrors.delete}</div>}
-      {apiErrors.events && <div style={styles.errorBanner}>{apiErrors.events}</div>}
-
-      {/* Estadísticas */}
-      <div style={styles.statsGrid}>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>📊</div>
-          <div style={styles.statValue}>{events.length}</div>
-          <div style={styles.statLabel}>Total eventos</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>⏳</div>
-          <div style={styles.statValue}>{draftEvents.length}</div>
-          <div style={styles.statLabel}>Borradores</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>🟢</div>
-          <div style={styles.statValue}>{publishedEvents.length}</div>
-          <div style={styles.statLabel}>Publicados</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statIcon}>🎫</div>
-          <div style={styles.statValue}>{confirmedOrders.length}</div>
-          <div style={styles.statLabel}>Órdenes confirmadas</div>
-        </div>
+        <Button
+          type="button"
+          variant="danger"
+          onClick={() => {
+            localStorage.removeItem('flashtix_token');
+            window.location.href = '/';
+          }}
+          style={styles.logoutBtn}
+        >
+          Cerrar sesion
+        </Button>
       </div>
 
-      <div style={styles.twoColumns}>
-        {/* Columna izquierda: Crear evento */}
-        <section style={styles.card}>
-          <h2 style={styles.sectionTitle}>➕ Crear Evento</h2>
-          <p style={styles.hint}>
-            Completa los datos del evento. Los campos de categorías y asientos usan formato JSON.
-          </p>
-          <form onSubmit={handleCreateEvent} style={styles.form}>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Nombre del evento</label>
-              <input
-                type="text"
-                value={createForm.name}
-                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                placeholder="Ej: World Tour 2026"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Artista</label>
-              <input
-                type="text"
-                value={createForm.artist}
-                onChange={(e) => setCreateForm({ ...createForm, artist: e.target.value })}
-                placeholder="Ej: The Headliners"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Venue - Nombre</label>
-              <input
-                type="text"
-                value={createForm.venueName}
-                onChange={(e) => setCreateForm({ ...createForm, venueName: e.target.value })}
-                placeholder="Ej: Estadio El Campín"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Venue - Ciudad</label>
-              <input
-                type="text"
-                value={createForm.venueCity}
-                onChange={(e) => setCreateForm({ ...createForm, venueCity: e.target.value })}
-                placeholder="Ej: Bogotá"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Fecha y hora del evento (ISO)</label>
-              <input
-                type="text"
-                value={createForm.startsAt}
-                onChange={(e) => setCreateForm({ ...createForm, startsAt: e.target.value })}
-                placeholder="2026-12-20T23:00:00.000Z"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Fecha de inicio de venta (ISO)</label>
-              <input
-                type="text"
-                value={createForm.saleStartsAt}
-                onChange={(e) => setCreateForm({ ...createForm, saleStartsAt: e.target.value })}
-                placeholder="2026-11-01T15:00:00.000Z"
-                style={styles.input}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Categorías de precio (JSON)</label>
-              <textarea
-                value={createForm.priceCategories}
-                onChange={(e) => setCreateForm({ ...createForm, priceCategories: e.target.value })}
-                placeholder='[{"category":"VIP","price":{"amount":45000000,"currency":"COP"}}]'
-                style={styles.textarea}
-                required
-              />
-            </div>
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Asientos (JSON)</label>
-              <textarea
-                value={createForm.seats}
-                onChange={(e) => setCreateForm({ ...createForm, seats: e.target.value })}
-                placeholder='[{"seatId":"A-01-01","category":"VIP"}]'
-                style={styles.textarea}
-                required
-              />
-            </div>
-            <button type="submit" style={styles.createBtn}>Crear Evento</button>
-          </form>
-        </section>
+      {message.text && (
+        <div style={{ ...styles.messageBanner, ...(message.type === 'success' ? styles.messageSuccess : styles.messageError) }}>
+          {message.text}
+        </div>
+      )}
 
-        {/* Columna derecha: Eventos */}
-        <section style={styles.card}>
-          <h2 style={styles.sectionTitle}>🎪 Mis Eventos</h2>
-          {events.length === 0 ? (
-            <p style={styles.empty}>No tienes eventos creados.</p>
-          ) : (
-            <div style={styles.eventList}>
-              {events.map((event) => (
-                <div key={event.eventId} style={styles.eventRow}>
-                  <div style={styles.eventInfo}>
-                    <strong style={styles.eventName}>{event.name}</strong>
-                    <p style={styles.eventDetail}>
-                      {event.venue.name} · {event.venue.city}
-                    </p>
-                    <p style={styles.eventDetail}>
-                      {new Date(event.startsAt).toLocaleDateString('es-CO')}
-                    </p>
-                  </div>
-                  <div style={styles.eventActions}>
-                    <span style={getStatusBadgeStyle(event.status)}>{event.status}</span>
-                    {event.status === 'DRAFT' && (
-                      <button
-                        onClick={() => handlePublish(event.eventId)}
-                        style={styles.publishBtn}
-                      >
-                        Publicar
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleDeleteEvent(event.eventId)}
-                      style={styles.deleteBtn}
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Órdenes (si están disponibles) */}
-        <section style={{ ...styles.card, marginTop: 24 }}>
-          <h2 style={styles.sectionTitle}>💸 Órdenes Recientes</h2>
-          {apiErrors.orders && (
-            <p style={styles.emptyHint}>{apiErrors.orders}</p>
-          )}
-          {confirmedOrders.length === 0 && !apiErrors.orders ? (
-            <p style={styles.empty}>No hay órdenes confirmadas todavía.</p>
-          ) : (
-            <div style={styles.orderList}>
-              {confirmedOrders.map((order) => (
-                <div key={order.orderId} style={styles.orderRow}>
-                  <div style={styles.orderInfo}>
-                    <strong style={styles.orderIdText}>#{order.orderId.slice(0, 8)}</strong>
-                    <p style={styles.orderDetail}>
-                      Evento: {order.eventId.slice(0, 8)}...
-                    </p>
-                    <p style={styles.orderDetail}>
-                      Asientos: {order.seats.map((s) => s.seatId).join(', ')}
-                    </p>
-                    <p style={styles.orderDetail}>
-                      {order.total.amount.toLocaleString('es-CO', {
-                        style: 'currency',
-                        currency: 'COP',
-                      })}
-                    </p>
-                  </div>
-                  <div style={styles.orderActions}>
-                    <span style={getStatusBadgeStyle(order.status)}>{order.status}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+      <div style={styles.tabBar}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setActiveTab('events');
+            setShowCreateForm(false);
+          }}
+          style={{ ...styles.tabBtn, ...(activeTab === 'events' ? styles.tabBtnActive : {}) }}
+        >
+          Todos los Eventos
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setActiveTab('my-events');
+            setShowCreateForm(false);
+          }}
+          style={{ ...styles.tabBtn, ...(activeTab === 'my-events' ? styles.tabBtnActive : {}) }}
+        >
+          Mis Eventos
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setActiveTab('orders');
+            setShowCreateForm(false);
+          }}
+          style={{ ...styles.tabBtn, ...(activeTab === 'orders' ? styles.tabBtnActive : {}) }}
+        >
+          Ordenes
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setActiveTab('monitoring');
+            setShowCreateForm(false);
+          }}
+          style={{ ...styles.tabBtn, ...(activeTab === 'monitoring' ? styles.tabBtnActive : {}) }}
+        >
+          Monitoreo
+        </Button>
       </div>
+
+      {activeTab === 'events' && (
+        <div>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            style={styles.createEventBtn}
+          >
+            {showCreateForm ? 'Ocultar formulario' : '+'} Crear Evento
+          </Button>
+
+          {showCreateForm && (
+            <div style={styles.createFormCard}>
+              <h2 style={styles.formTitle}>Crear Evento</h2>
+              <form onSubmit={handleCreateEvent} style={styles.createForm}>
+                <div style={styles.formFull}>
+                  <label style={styles.formLabel}>Nombre del evento</label>
+                  <input
+                    style={styles.formInput}
+                    placeholder="Ej. Concierto Rock 2026"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div style={styles.formFull}>
+                  <label style={styles.formLabel}>Artista</label>
+                  <input
+                    style={styles.formInput}
+                    placeholder="Ej. The Headliners"
+                    value={createForm.artist}
+                    onChange={(e) => setCreateForm({ ...createForm, artist: e.target.value })}
+                    required
+                  />
+                </div>
+                <div style={styles.formFull}>
+                  <label style={styles.formLabel}>Descripcion</label>
+                  <input
+                    style={styles.formInput}
+                    placeholder="Descripcion del evento"
+                    value={createForm.description}
+                    onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  />
+                </div>
+                <div style={styles.formHalf}>
+                  <label style={styles.formLabel}>Boletas disponibles</label>
+                  <input
+                    type="number"
+                    style={styles.formInput}
+                    placeholder="Ej. 200"
+                    value={createForm.totalSeats}
+                    onChange={(e) => setCreateForm({ ...createForm, totalSeats: e.target.value })}
+                    required
+                  />
+                </div>
+                <div style={styles.formHalf}>
+                  <label style={styles.formLabel}>Costo por boleta (COP)</label>
+                  <input
+                    type="number"
+                    style={styles.formInput}
+                    placeholder="Ej. 45000"
+                    value={createForm.price}
+                    onChange={(e) => setCreateForm({ ...createForm, price: e.target.value })}
+                    required
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={creating || loading}
+                  variant="primary"
+                  style={styles.createSubmitBtn}
+                >
+                  {creating ? 'Creando...' : 'Crear Evento'}
+                </Button>
+              </form>
+            </div>
+          )}
+
+          <div style={styles.sectionCard}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>Eventos del Sistema</h2>
+            </div>
+            <div style={styles.tableWrapper}>
+              <table style={styles.table}>
+                <thead style={styles.tableHead}>
+                  <tr style={styles.tableRow}>
+                    <th style={styles.tableCell}>Nombre</th>
+                    <th style={styles.tableCell}>Descripcion</th>
+                    <th style={styles.tableCell}>Boletas</th>
+                    <th style={styles.tableCell}>Precio</th>
+                    <th style={styles.tableCell}>Estado</th>
+                    <th style={styles.tableCell}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((event) => (
+                    <tr key={event.event_id} style={styles.tableRow}>
+                      <td style={styles.tableCell}>{event.name}</td>
+                      <td style={{ ...styles.tableCell, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.description || '—'}</td>
+                      <td style={styles.tableCell}>{event.total_seats}</td>
+                      <td style={styles.tableCell}>${event.price_amount.toLocaleString()} COP</td>
+                      <td style={styles.tableCell}>
+                        <span style={{ ...styles.badge, ...statusColor(event.status) }}>{event.status}</span>
+                      </td>
+                      <td style={styles.tableCell}>
+                        {event.status === 'DRAFT' && (
+                          <Button
+                            type="button"
+                            onClick={() => handlePublish(event.event_id)}
+                            disabled={loading}
+                            variant="primary"
+                            style={styles.tableBtn}
+                          >
+                            Publicar
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {events.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ ...styles.tableCell, padding: 32, textAlign: 'center', color: colors.muted }}>
+                        No hay eventos creados aun.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'my-events' && (
+        <div>
+          <div style={styles.sectionCard}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>Mis Eventos</h2>
+            </div>
+            <div style={styles.tableWrapper}>
+              <table style={styles.table}>
+                <thead style={styles.tableHead}>
+                  <tr style={styles.tableRow}>
+                    <th style={styles.tableCell}>Nombre</th>
+                    <th style={styles.tableCell}>Descripcion</th>
+                    <th style={styles.tableCell}>Boletas</th>
+                    <th style={styles.tableCell}>Precio</th>
+                    <th style={styles.tableCell}>Estado</th>
+                    <th style={styles.tableCell}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {myEvents.map((event) => (
+                    <tr key={event.event_id} style={styles.tableRow}>
+                      <td style={styles.tableCell}>{event.name}</td>
+                      <td style={{ ...styles.tableCell, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.description || '—'}</td>
+                      <td style={styles.tableCell}>{event.total_seats}</td>
+                      <td style={styles.tableCell}>${event.price_amount.toLocaleString()} COP</td>
+                      <td style={styles.tableCell}>
+                        <span style={{ ...styles.badge, ...statusColor(event.status) }}>{event.status}</span>
+                      </td>
+                      <td style={styles.tableCell}>
+                        {editing === event.event_id ? (
+                          <form onSubmit={handleUpdateEvent} style={styles.editForm}>
+                            <input
+                              style={styles.editInput}
+                              value={editForm.name}
+                              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                              required
+                            />
+                            <input
+                              style={styles.editInput}
+                              value={editForm.description}
+                              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                            />
+                            <input
+                              type="number"
+                              style={styles.editInputSmall}
+                              value={editForm.totalSeats}
+                              onChange={(e) => setEditForm({ ...editForm, totalSeats: e.target.value })}
+                              required
+                            />
+                            <input
+                              type="number"
+                              style={styles.editInputSmall}
+                              value={editForm.price}
+                              onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                              required
+                            />
+                            <Button type="submit" disabled={loading} variant="primary" style={styles.editBtn}>
+                              Guardar
+                            </Button>
+                            <Button type="button" variant="outline" onClick={() => setEditing(null)} style={styles.editCancelBtn}>
+                              Cancelar
+                            </Button>
+                          </form>
+                        ) : (
+                          <>
+                            {event.status === 'DRAFT' && (
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  setEditing(event.event_id);
+                                  setEditForm({
+                                    name: event.name,
+                                    description: event.description,
+                                    totalSeats: String(event.total_seats),
+                                    price: String(event.price_amount),
+                                  });
+                                }}
+                                variant="primary"
+                                style={styles.tableBtn}
+                              >
+                                Editar
+                              </Button>
+                            )}
+                            {event.status === 'DRAFT' && (
+                              <Button
+                                type="button"
+                                onClick={() => handlePublish(event.event_id)}
+                                disabled={loading}
+                                variant="primary"
+                                style={{ ...styles.tableBtn, marginLeft: 8 }}
+                              >
+                                Publicar
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {myEvents.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ ...styles.tableCell, padding: 32, textAlign: 'center', color: colors.muted }}>
+                        No tienes eventos creados.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'orders' && (
+        <div>
+          <div style={styles.sectionCard}>
+            <div style={styles.sectionHeader}>
+              <div style={styles.ordersSearchBar}>
+                <div>
+                  <h2 style={styles.sectionTitle}>Ordenes del Sistema</h2>
+                  <p style={styles.subtitle}>Busca por ID de transacción para reembolsar</p>
+                </div>
+                <div style={styles.searchInputWrap}>
+                  <input
+                    type="text"
+                    placeholder="ID de transacción (order_id)"
+                    value={refundSearch}
+                    onChange={(e) => setRefundSearch(e.target.value)}
+                    style={styles.searchInput}
+                  />
+                </div>
+              </div>
+            </div>
+            <div style={styles.tableWrapper}>
+              <table style={styles.table}>
+                <thead style={styles.tableHead}>
+                  <tr style={styles.tableRow}>
+                    <th style={styles.tableCell}>ID de Transacción</th>
+                    <th style={styles.tableCell}>Usuario</th>
+                    <th style={styles.tableCell}>Monto</th>
+                    <th style={styles.tableCell}>Estado</th>
+                    <th style={styles.tableCell}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOrders.map((order) => (
+                    <tr key={order.order_id} style={styles.tableRow}>
+                      <td style={styles.tableCell}>{order.order_id}</td>
+                      <td style={styles.tableCell}>{order.user_email}</td>
+                      <td style={styles.tableCell}>${order.total_amount.toLocaleString()} COP</td>
+                      <td style={styles.tableCell}>
+                        <span style={{ ...styles.badge, ...orderStatusColor(order.status) }}>{order.status}</span>
+                      </td>
+                      <td style={styles.tableCell}>
+                        {order.status === 'CONFIRMED' && (
+                          <Button
+                            type="button"
+                            onClick={() => handleRefund(order.order_id)}
+                            disabled={loading}
+                            variant="danger"
+                            style={styles.tableBtn}
+                          >
+                            Reembolsar
+                          </Button>
+                        )}
+                        {order.status !== 'CONFIRMED' && (
+                          <span style={{ ...styles.badge, color: colors.muted, background: 'transparent', border: 'none' }}>No reembolsable</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ ...styles.tableCell, padding: 32, textAlign: 'center', color: colors.muted }}>
+                        No hay ordenes registradas con ese ID de transacción.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'monitoring' && (
+        <div style={styles.monitoringGrid}>
+          {/* Grafico 1: Errores en la compra */}
+          <div style={styles.monitoringCard}>
+            <div style={styles.monitoringCardHeader}>
+              <h2 style={styles.monitoringCardTitle}>Errores en la Compra</h2>
+              <span style={styles.statPill}>{errorLogs.length}</span>
+            </div>
+            <div style={styles.monitoringList}>
+              {errorLogs.length === 0 ? (
+                <div style={styles.emptyState}>Sin errores de compra recientes</div>
+              ) : (
+                errorLogs.map((err, i) => (
+                  <div key={i} style={styles.errorLogItem}>
+                    <div>
+                      <p style={styles.errorLogOp}>{err.operation}</p>
+                      <p style={styles.errorLogMsg}>{err.message}</p>
+                    </div>
+                    <span style={styles.errorLogTime}>{new Date(err.timestamp).toLocaleString()}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Grafico 2: Compras de boletos exitosas */}
+          <div style={styles.monitoringCardWide}>
+            <div style={styles.monitoringCardHeader}>
+              <h2 style={styles.monitoringCardTitle}>Compras de Boletos Exitosas</h2>
+              <span style={styles.statPill}>{stats.ordersConfirmed}</span>
+            </div>
+            <div style={styles.statTiles}>
+              <div style={styles.statTile}>
+                <div style={styles.statValue}>{stats.ordersConfirmed}</div>
+                <div style={styles.statLabel}>Ordenes confirmadas</div>
+              </div>
+              <div style={styles.statTile}>
+                <div style={styles.statValue}>{stats.eventsPublished}</div>
+                <div style={styles.statLabel}>Eventos publicados</div>
+              </div>
+              <div style={styles.statTile}>
+                <div style={styles.statValue}>{stats.eventsCreated}</div>
+                <div style={styles.statLabel}>Eventos creados</div>
+              </div>
+              <div style={styles.statTile}>
+                <div style={styles.statValue}>{stats.refundsRequested}</div>
+                <div style={styles.statLabel}>Reembolsos solicitados</div>
+              </div>
+            </div>
+            <div style={styles.chartWrap}>
+              <svg style={styles.chartSvg} viewBox="0 0 700 350">
+                <defs>
+                  <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop stopColor={colors.primary} stopOpacity={1} offset="0%" />
+                    <stop stopColor={colors.primary} stopOpacity={1} offset="100%" />
+                  </linearGradient>
+                </defs>
+                <rect x="60" y="120" width="140" height="160" fill="url(#grad1)" rx="10" />
+                <rect x="230" y="60" width="140" height="220" fill="url(#grad1)" rx="10" />
+                <rect x="400" y="170" width="140" height="100" fill="url(#grad1)" rx="10" />
+                <rect x="570" y="90" width="140" height="140" fill="url(#grad1)" rx="10" />
+                <text x="130" y="310" textAnchor="middle" fontSize="14" fill={colors.muted}>Confirmadas</text>
+                <text x="300" y="310" textAnchor="middle" fontSize="14" fill={colors.muted}>Publicadas</text>
+                <text x="470" y="310" textAnchor="middle" fontSize="14" fill={colors.muted}>Creadas</text>
+                <text x="640" y="310" textAnchor="middle" fontSize="14" fill={colors.muted}>Reembolsos</text>
+                <text x="130" y="105" textAnchor="middle" fontSize="16" fontWeight="bold" fill={colors.text}>{stats.ordersConfirmed}</text>
+                <text x="300" y="45" textAnchor="middle" fontSize="16" fontWeight="bold" fill={colors.text}>{stats.eventsPublished}</text>
+                <text x="470" y="160" textAnchor="middle" fontSize="16" fontWeight="bold" fill={colors.text}>{stats.eventsCreated}</text>
+                <text x="640" y="75" textAnchor="middle" fontSize="16" fontWeight="bold" fill={colors.text}>{stats.refundsRequested}</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};
 
-function getStatusBadgeStyle(status: string): React.CSSProperties {
-  const colors: Record<string, string> = {
-    DRAFT: '#fbbf24',
-    PUBLISHED: '#059669',
-    ON_SALE: '#2563eb',
-    SOLD_OUT: '#9ca3af',
-    CANCELLED: '#dc2626',
-  };
-  return {
-    padding: '4px 10px',
-    background: colors[status] || '#9ca3af',
-    color: '#ffffff',
+export default AdminDashboard;
+
+const styles: Record<string, React.CSSProperties> = {
+  root: {
+    minHeight: '100vh',
+    padding: 24,
+    maxWidth: 1400,
+    margin: '0 auto',
+    background: colors.background,
+    color: colors.text,
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+  },
+  headerBar: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  title: { margin: 0, fontSize: 24, fontWeight: 700, color: colors.text },
+  subtitle: { margin: 0, color: colors.muted, fontSize: 14 },
+  logoutBtn: { padding: '10px 20px', fontSize: 14 },
+  messageBanner: {
+    padding: 12,
+    borderRadius: 6,
+    marginBottom: 16,
+    border: `1px solid ${colors.border}`,
+    fontSize: 14,
+  },
+  messageSuccess: {
+    background: 'rgba(172, 228, 170, 0.15)',
+    color: colors.accent,
+    border: `1px solid ${colors.accent}`,
+  },
+  messageError: {
+    background: colors.errorBg,
+    color: colors.error,
+    border: `1px solid ${colors.errorBorder}`,
+  },
+  tabBar: {
+    display: 'flex',
+    borderBottom: `1px solid ${colors.border}`,
+    marginBottom: 24,
+    gap: 0,
+  },
+  tabBtn: {
+    background: 'transparent',
+    border: 'none',
+    borderBottom: `2px solid transparent`,
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+    padding: '16px 20px',
+  },
+  tabBtnActive: {
+    color: colors.primary,
+    borderBottom: `2px solid ${colors.primary}`,
+  },
+  sectionCard: {
+    background: colors.surface,
+    borderRadius: 12,
+    border: `1px solid ${colors.border}`,
+    marginBottom: 24,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    padding: 20,
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  sectionTitle: { margin: 0, fontSize: 18, fontWeight: 600, color: colors.text },
+  createEventBtn: {
+    marginBottom: 16,
+    padding: '12px 24px',
+    fontSize: 16,
+    fontWeight: 600,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+  },
+  createFormCard: {
+    background: colors.surface,
+    padding: 24,
+    borderRadius: 12,
+    border: `1px solid ${colors.border}`,
+    marginBottom: 24,
+  },
+  formTitle: { margin: '0 0 16px 0', fontSize: 20, fontWeight: 600, color: colors.text },
+  createForm: { display: 'grid', gap: 16 },
+  formFull: { display: 'flex', flexDirection: 'column', gap: 6 },
+  formHalf: { display: 'flex', flexDirection: 'column', gap: 6 },
+  formLabel: { fontSize: 13, fontWeight: 600, marginBottom: 4, color: colors.muted },
+  formInput: {
+    width: '100%',
+    padding: '10px 12px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    fontSize: 15,
+    color: colors.text,
+    background: colors.background,
+  },
+  createSubmitBtn: {
+    width: 'fit-content',
+    padding: '12px 28px',
+    fontSize: 17,
+    fontWeight: 600,
+  },
+  tableWrapper: { overflowX: 'auto' },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  tableHead: {},
+  tableRow: { borderBottom: `1px solid ${colors.border}` },
+  tableCell: { padding: '16px 20px', textAlign: 'left', fontSize: 14, color: colors.text },
+  badge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '6px 12px',
+    borderRadius: 20,
+    fontSize: 12,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  tableBtn: {
+    padding: '8px 16px',
+    fontSize: 14,
+    fontWeight: 600,
+  },
+  editForm: {
+    display: 'flex',
+    gap: 8,
+    alignItems: 'flex-end',
+    flexWrap: 'wrap',
+  },
+  editInput: {
+    padding: '8px 12px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 6,
+    fontSize: 13,
+    color: colors.text,
+    background: colors.background,
+    minWidth: 120,
+  },
+  editInputSmall: {
+    padding: '8px 12px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 6,
+    fontSize: 13,
+    color: colors.text,
+    background: colors.background,
+    minWidth: 80,
+  },
+  editBtn: { padding: '8px 16px', fontSize: 14, fontWeight: 600 },
+  editCancelBtn: { padding: '8px 16px', fontSize: 14, fontWeight: 600, color: colors.muted },
+  ordersSearchBar: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  searchInputWrap: { width: '100%', maxWidth: 300 },
+  searchInput: {
+    width: '100%',
+    padding: '10px 12px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    fontSize: 14,
+    color: colors.text,
+    background: colors.background,
+  },
+  monitoringGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: 16,
+  },
+  monitoringCard: {
+    background: colors.surface,
+    borderRadius: 12,
+    border: `1px solid ${colors.border}`,
+  },
+  monitoringCardWide: {
+    background: colors.surface,
+    borderRadius: 12,
+    border: `1px solid ${colors.border}`,
+  },
+  monitoringCardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  monitoringCardTitle: { margin: 0, fontSize: 18, fontWeight: 600, color: colors.text },
+  statPill: {
+    padding: '2px 8px',
     borderRadius: 20,
     fontSize: 11,
     fontWeight: 600,
     textTransform: 'uppercase',
-  };
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 0, fontFamily: 'system-ui, sans-serif', minHeight: '100vh' },
-  loader: {
+    background: 'rgba(172, 228, 170, 0.15)',
+    color: colors.accent,
+    border: `1px solid ${colors.accent}`,
+  },
+  monitoringList: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '60vh',
-    fontSize: 18,
-    color: '#6b7280',
+    flexDirection: 'column',
+    gap: 0,
   },
-  error: {
-    padding: 24,
-    background: '#fef2f2',
-    color: '#dc2626',
-    borderRadius: 8,
-    margin: 24,
+  emptyState: {
+    padding: 32,
+    textAlign: 'center',
+    color: colors.muted,
+    fontSize: 14,
   },
-  header: {
+  errorLogItem: {
+    padding: 16,
+    borderBottom: `1px solid ${colors.border}`,
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 32,
-    paddingRight: 20,
+    alignItems: 'start',
   },
-  welcome: {},
-  title: { margin: '0 0 4px 0', fontSize: 28, color: '#111827' },
-  subtitle: { margin: 0, color: '#6b7280', fontSize: 14 },
-  roleChip: {
-    padding: '8px 16px',
-    background: '#dbeafe',
-    color: '#1e40af',
-    borderRadius: 20,
-    fontSize: 13,
-    fontWeight: 600,
-  },
-  successBanner: {
-    marginBottom: 16,
-    padding: 12,
-    background: '#dcfce7',
-    color: '#166534',
-    borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 500,
-  },
-  errorBanner: {
-    marginBottom: 16,
-    padding: 12,
-    background: '#fef2f2',
-    color: '#dc2626',
-    borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 500,
-  },
-  statsGrid: {
+  errorLogOp: { margin: 0, fontSize: 14, fontWeight: 600, color: colors.text },
+  errorLogMsg: { margin: '4px 0 0 0', fontSize: 14, color: colors.muted },
+  errorLogTime: { fontSize: 12, color: colors.muted },
+  statTiles: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gridTemplateColumns: 'repeat(4, 1fr)',
     gap: 16,
     marginBottom: 24,
   },
-  statCard: {
-    padding: 20,
-    background: '#ffffff',
+  statTile: {
+    background: colors.background,
+    padding: 16,
     borderRadius: 12,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 16,
+    border: `1px solid ${colors.border}`,
   },
-  statIcon: { fontSize: 32 },
-  statValue: { fontSize: 28, fontWeight: 700, color: '#111827', margin: '0 0 4px 0' },
-  statLabel: { margin: 0, fontSize: 13, color: '#6b7280' },
-  twoColumns: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 2fr',
-    gap: 24,
+  statValue: {
+    fontSize: 28,
+    fontWeight: 800,
+    color: colors.text,
+    margin: '0 0 4px 0',
   },
-  card: {
-    background: '#ffffff',
-    borderRadius: 12,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    padding: 24,
-    marginBottom: 24,
-  },
-  sectionTitle: { margin: '0 0 12px 0', fontSize: 18, color: '#111827' },
-  hint: { margin: '0 0 16px 0', fontSize: 13, color: '#6b7280' },
-  empty: { color: '#6b7280', fontSize: 14, margin: 8 },
-  emptyHint: { color: '#dc2626', fontSize: 14, margin: 8 },
-  form: { display: 'flex', flexDirection: 'column', gap: 12 },
-  inputGroup: { display: 'flex', flexDirection: 'column', gap: 6 },
-  label: { fontSize: 13, fontWeight: 600, color: '#374151' },
-  input: {
-    padding: 10,
-    border: '1px solid #d1d5db',
-    borderRadius: 6,
-    fontSize: 14,
-  },
-  textarea: {
-    padding: 10,
-    border: '1px solid #d1d5db',
-    borderRadius: 6,
-    fontSize: 13,
-    fontFamily: 'monospace',
-    minHeight: 80,
-  },
-  createBtn: {
-    marginTop: 8,
-    padding: 12,
-    background: '#059669',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  eventList: { display: 'flex', flexDirection: 'column', gap: 12 },
-  orderList: { display: 'flex', flexDirection: 'column', gap: 12 },
-  eventRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    border: '1px solid #e5e7eb',
-    borderRadius: 8,
-    background: '#f9fafb',
-  },
-  orderRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    border: '1px solid #e5e7eb',
-    borderRadius: 8,
-    background: '#f9fafb',
-  },
-  eventInfo: { flex: 1 },
-  orderInfo: { flex: 1 },
-  eventName: { display: 'block', margin: '0 0 4px 0', fontSize: 15, color: '#111827' },
-  orderIdText: { display: 'block', margin: '0 0 4px 0', fontSize: 15, color: '#111827' },
-  eventDetail: { margin: 0, fontSize: 13, color: '#6b7280' },
-  orderDetail: { margin: 0, fontSize: 13, color: '#6b7280' },
-  eventActions: { display: 'flex', alignItems: 'center', gap: 8 },
-  orderActions: { display: 'flex', alignItems: 'center', gap: 8 },
-  publishBtn: {
-    padding: '6px 14px',
-    background: '#059669',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  deleteBtn: {
-    padding: '6px 14px',
-    background: '#dc2626',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
+  statLabel: { fontSize: 12, color: colors.muted },
+  chartWrap: { padding: 16 },
+  chartSvg: { width: '100%', height: 200, display: 'block' },
 };
+
+// Apply responsive padding via inline media is not supported; root uses fixed 24px.
+// Keep a desktop-friendly padding by noting md:p-6 intent is approximated.
