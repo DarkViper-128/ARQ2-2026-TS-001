@@ -91,9 +91,36 @@ export class QueueService {
   }
 
   /** WR-2. POST /events/{eventId}/queue. */
+  /**
+   * WR-2. Puts the fan in the queue, or returns the ticket they already have.
+   *
+   * A fan whose admission window ran out keeps a pointer to a dead ticket. `view()`
+   * frees that slot and asks them to "join the queue again" - but on this route they
+   * already are, so answering 410 would make the first click always fail and the second
+   * one work. When that happens the join is simply retried, which now lands them at the
+   * end of the line with a fresh ticket.
+   */
   async join(eventId: string, userId: string): Promise<QueueView> {
     await this.assertSaleOpen(eventId);
+    try {
+      return await this.joinOnce(eventId, userId);
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
 
+      if (error.code === 'QUEUE_TICKET_EXPIRED') {
+        // view() already released the slot, so this attempt creates a new ticket.
+        return this.joinOnce(eventId, userId);
+      }
+      if (error.code === 'QUEUE_TICKET_NOT_FOUND') {
+        // The ticket itself expired out of Redis while the pointer survived.
+        await this.redis.del(`queue-user:${eventId}:${userId}`);
+        return this.joinOnce(eventId, userId);
+      }
+      throw error;
+    }
+  }
+
+  private async joinOnce(eventId: string, userId: string): Promise<QueueView> {
     const candidate = randomUUID();
     const [ticketId, created] = (await this.redis.eval(
       JOIN_QUEUE,
