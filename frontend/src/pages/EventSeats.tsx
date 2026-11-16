@@ -15,10 +15,14 @@ interface Event {
   totalSeats?: number;
 }
 
+/** A seat exactly as the Catalog Service reports it (spec.md, GET /events/{id}/seats). */
 interface Seat {
-  id: string;
+  seatId: string;
+  section: string;
+  row: string;
   number: string;
-  status: 'available' | 'selected' | 'taken';
+  category: string;
+  status: 'AVAILABLE' | 'HELD' | 'SOLD';
 }
 
 const PRICE_PER_TICKET = 100; // 100 pesos por boleta
@@ -39,16 +43,21 @@ export default function EventSeats() {
 
   useEffect(() => {
     if (!eventId) return;
-    api.get(`/events/${eventId}`, token)
-      .then((data: Event) => {
-        setEvent(data);
-        const total = data.totalSeats || 100;
-        const seatCount = Math.min(total, 100);
-        const initial: Seat[] = [];
-        for (let i = 1; i <= seatCount; i++) {
-          initial.push({ id: `seat-${i}`, number: `A-${String(i).padStart(3, '0')}`, status: 'available' });
-        }
-        setSeats(initial);
+    // The seat map comes from the catalog. It used to be generated here with ids like
+    // "A-001", which do not exist and which the Reservation Service rejects with 400.
+    Promise.all([
+      api.get(`/events/${eventId}`, token),
+      api.get(`/events/${eventId}/seats`, token),
+    ])
+      .then(([eventData, seatData]: [Event, { seats: Seat[] }]) => {
+        setEvent(eventData);
+        setSeats(Array.isArray(seatData?.seats) ? seatData.seats : []);
+        // Drop any selection that somebody else took while this page was open.
+        setSelectedSeats((prev) =>
+          prev.filter((id) =>
+            (seatData?.seats ?? []).some((s) => s.seatId === id && s.status === 'AVAILABLE'),
+          ),
+        );
       })
       .catch((err: Error) => setError(err.message));
   }, [eventId, token]);
@@ -128,7 +137,7 @@ export default function EventSeats() {
   if (!event) return <div style={styles.empty}>Evento no encontrado</div>;
 
   const total = selectedSeats.length * PRICE_PER_TICKET;
-  const takenCount = seats.filter((s) => s.status === 'taken').length;
+  const takenCount = seats.filter((s) => s.status !== 'AVAILABLE').length;
 
   return (
     <div style={styles.container}>
@@ -161,14 +170,14 @@ export default function EventSeats() {
           <div style={styles.stageLabel}>ESCENARIO</div>
           <div style={styles.seatMap}>
             {seats.map((seat) => {
-              const selected = isSelected(seat.id);
-              const taken = seat.status === 'taken';
-              const hover = !taken && !loading && hoveredSeat === seat.id;
+              const selected = isSelected(seat.seatId);
+              const taken = seat.status !== 'AVAILABLE';
+              const hover = !taken && !loading && hoveredSeat === seat.seatId;
               return (
                 <button
-                  key={seat.id}
-                  onClick={taken ? undefined : () => toggleSeat(seat.id)}
-                  onMouseEnter={taken || loading ? undefined : () => setHoveredSeat(seat.id)}
+                  key={seat.seatId}
+                  onClick={taken ? undefined : () => toggleSeat(seat.seatId)}
+                  onMouseEnter={taken || loading ? undefined : () => setHoveredSeat(seat.seatId)}
                   onMouseLeave={taken || loading ? undefined : () => setHoveredSeat(null)}
                   disabled={taken || loading}
                   style={{
@@ -178,9 +187,9 @@ export default function EventSeats() {
                     ...(hover ? { transform: 'translateY(-1px)', opacity: 0.92 } : {}),
                     transition: 'transform 0.15s, opacity 0.15s',
                   }}
-                  title={`Asiento ${seat.number}`}
+                  title={`Asiento ${seat.seatId} (${seat.category}) - ${seat.status}`}
                 >
-                  {seat.number.slice(-3)}
+                  {seat.number}
                 </button>
               );
             })}
