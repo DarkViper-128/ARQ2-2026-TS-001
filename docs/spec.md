@@ -32,6 +32,7 @@ slow legacy gateway (up to 15 s) and email the ticket, **never selling the same 
 | Promtail | 2.9.4 | Container log shipping to Loki | - | F6 |
 | node-exporter | 1.7.0 | Host metrics | - | F6 |
 | cAdvisor | 0.49.1 | Container metrics | - | F6 |
+| **Jaeger** | 1.47 | Distributed tracing; collects spans from every service via OpenTelemetry | - | F6 |
 
 Each service only touches its own data; the rest comes through its API or its events.
 
@@ -78,6 +79,35 @@ rejected / hold expired) · `PENDING` or `CONFIRMED` → `REFUND_PENDING` → `C
 | `hold-store` (Redis) | `queue:{eventId}` | sorted set by arrival time |
 | `catalog-cache` (Redis) | `event:{eventId}` (60 s), `availability:{eventId}` (5 s) | catalog read model |
 | `booking-db` (MySQL) | `orders`, `outbox`, `sold_seats` | orders, pending events, sold seats |
+
+
+## Distributed Tracing (Jaeger)
+
+FlashTix instruments every service with **OpenTelemetry** and exports traces to **Jaeger** (all-in-one image `jaegertracing/all-in-one:1.47`), reachable at `http://localhost:16686`.
+
+### Components
+
+| Component | Image | Ports | Purpose |
+| Jaeger all-in-one | `jaegertracing/all-in-one:1.47` | 16686 (UI), 14268 (collector HTTP), 14250 (gRPC), 5778 (agent), 6831/6832 (Thrift UDP) | Collects, stores and visualizes distributed traces |
+
+### How it works
+
+1. Each service initializes the OpenTelemetry SDK at bootstrap (`libs/tracing`) with `initTracing({ serviceName })`.
+2. The `x-correlation-id` header (already propagated through HTTP and RabbitMQ envelopes) is mapped to the W3C `traceparent` context, so spans across services are linked into a single trace.
+3. Automatic instrumentations capture: incoming HTTP requests, outgoing HTTP calls (catalog, reservation, payment gateway), RabbitMQ publish/consume (amqplib), MySQL queries (mysql2) and Redis commands (ioredis).
+4. Spans are exported to Jaeger's HTTP collector at `http://jaeger:14268/api/traces` via the `OTEL_EXPORTER_JAEGER_ENDPOINT` env var.
+5. The Jaeger service is declared in `docker-compose.yml` and every service declares `depends_on: jaeger` (condition: `service_healthy`) plus the env vars `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_JAEGER_ENDPOINT`.
+
+### Trace flow example
+
+A fan purchase produces a single trace with spans:
+
+- `HTTP POST /v1/orders` (Order Service) → `HTTP POST /v1/holds` (Reservation) → `Redis SETNX seat:...` → `AMQP publish order.created` → `Payment Worker` → `HTTP POST payment-gateway-mock` → `Ticket Service` → `S3 PUT ticket.pdf` → `Notification Worker` → `SMTP mailpit`.
+
+All spans share the same `traceId`, derived from the original `x-correlation-id`.
+
+---
+
 
 ```sql
 -- Final safety net against overbooking: a seat can be sold only once per event
