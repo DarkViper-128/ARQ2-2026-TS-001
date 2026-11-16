@@ -80,18 +80,19 @@ export default function Catalog() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 24, fontFamily: 'system-ui, sans-serif' },
+  container: { padding: 24, fontFamily: 'system-ui, sans-serif', background: '#0f172a', color: '#f1f5f9', minHeight: '100vh' },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 32,
   },
-  title: { margin: 0, fontSize: 32, color: '#111827' },
+  title: { margin: 0, fontSize: 32, color: '#ffffff' },
   userInfo: {
     display: 'flex',
     alignItems: 'center',
     gap: 16,
+    color: '#cbd5e1',
   },
   eventsGrid: {
     display: 'grid',
@@ -99,25 +100,26 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 24,
   },
   eventCard: {
-    border: '1px solid #e5e7eb',
+    border: '1px solid #334155',
     borderRadius: 12,
     padding: 24,
-    background: '#ffffff',
+    background: '#1e293b',
   },
   eventInfo: { marginBottom: 20 },
-  eventName: { margin: 0, fontSize: 20, color: '#111827' },
-  eventArtist: { margin: 4, color: '#6b7280' },
-  eventVenue: { margin: 4, color: '#374151' },
-  eventDate: { margin: 4, color: '#6b7280' },
+  eventName: { margin: 0, fontSize: 20, color: '#ffffff' },
+  eventArtist: { margin: 4, color: '#94a3b8' },
+  eventVenue: { margin: 4, color: '#cbd5e1' },
+  eventDate: { margin: 4, color: '#94a3b8' },
   statusBadge: {
     display: 'inline-block',
     marginTop: 8,
     padding: '4px 10px',
-    background: '#dcfce7',
-    color: '#166534',
+    background: '#064e3b',
+    color: '#6ee7b7',
     borderRadius: 20,
     fontSize: 12,
     fontWeight: 600,
+    border: '1px solid #10b981',
   },
   viewSeatsBtn: {
     width: '100%',

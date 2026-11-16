@@ -15,11 +15,11 @@ interface Order {
 }
 
 const STATUS_STYLE: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  PENDING:   { color: '#92400e', bg: '#fef3c7', border: '#d97706', label: 'Pago en proceso' },
-  CONFIRMED: { color: '#166534', bg: '#f0fdf4', border: '#bbf7d0', label: 'Pago aprobado' },
-  FAILED:    { color: '#991b1b', bg: '#fef2f2', border: '#fecaca', label: 'Pago fallido' },
-  REFUND_PENDING: { color: '#92400e', bg: '#fef3c7', border: '#d97706', label: 'Reembolso en proceso' },
-  CANCELLED: { color: '#4b5563', bg: '#f3f4f6', border: '#e5e7eb', label: 'Orden cancelada' },
+  PENDING:   { color: '#fbbf24', bg: '#78350f', border: '#d97706', label: 'Pago en proceso' },
+  CONFIRMED: { color: '#4ade80', bg: '#14532d', border: '#bbf7d0', label: 'Pago aprobado' },
+  FAILED:    { color: '#fca5a5', bg: '#7f1d1d', border: '#fecaca', label: 'Pago fallido' },
+  REFUND_PENDING: { color: '#fbbf24', bg: '#78350f', border: '#d97706', label: 'Reembolso en proceso' },
+  CANCELLED: { color: '#9ca3af', bg: '#334155', border: '#64748b', label: 'Orden cancelada' },
 };
 
 export default function Payment() {
@@ -212,44 +212,47 @@ export default function Payment() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 24, fontFamily: 'system-ui, sans-serif', minHeight: '100vh' },
+  container: { padding: 24, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: '#0f172a', color: '#f1f5f9' },
   nav: { marginBottom: 32 },
   backBtn: {
     background: 'none',
-    border: '1px solid #d1d5db',
+    border: '1px solid #334155',
     padding: '8px 16px',
     borderRadius: 6,
     cursor: 'pointer',
     fontSize: 14,
+    color: '#94a3b8',
   },
-  title: { fontSize: 28, color: '#111827', marginBottom: 24 },
+  title: { fontSize: 28, color: '#ffffff', marginBottom: 24 },
   loader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     height: '60vh',
     fontSize: 18,
-    color: '#6b7280',
+    color: '#94a3b8',
   },
   error: {
     padding: 24,
-    background: '#fef2f2',
-    color: '#dc2626',
+    background: '#450a0a',
+    color: '#fca5a5',
     borderRadius: 8,
     margin: 24,
+    border: '1px solid #7f1d1d',
   },
   empty: {
     textAlign: 'center',
     padding: 60,
-    background: '#f3f4f6',
+    background: '#1e293b',
     borderRadius: 12,
+    border: '1px solid #334155',
   },
   orderCard: {
     padding: 32,
-    background: '#ffffff',
-    border: '1px solid #e5e7eb',
+    background: '#1e293b',
+    border: '1px solid #334155',
     borderRadius: 12,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
     maxWidth: 520,
     margin: '0 auto',
   },
@@ -262,16 +265,16 @@ const styles: Record<string, React.CSSProperties> = {
   orderIdLabel: {
     fontSize: 12,
     fontWeight: 600,
-    color: '#6b7280',
+    color: '#94a3b8',
     textTransform: 'uppercase',
   },
   orderIdValue: {
     fontSize: 18,
     fontWeight: 700,
-    color: '#111827',
+    color: '#ffffff',
   },
   statusRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 },
-  statusLabel: { fontSize: 14, color: '#6b7280' },
+  statusLabel: { fontSize: 14, color: '#94a3b8' },
   statusBadge: {
     padding: '4px 12px',
     borderRadius: 20,
@@ -279,16 +282,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
+    background: '#0f172a',
+    border: '1px solid #334155',
+    color: '#cbd5e1',
   },
   orderInfo: { display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 },
-  orderText: { margin: 0, fontSize: 14, color: '#374151' },
+  orderText: { margin: 0, fontSize: 14, color: '#cbd5e1' },
   failureReason: {
     margin: 0,
     fontSize: 13,
-    color: '#991b1b',
-    background: '#fef2f2',
+    color: '#fca5a5',
+    background: '#450a0a',
     padding: 8,
     borderRadius: 6,
+    border: '1px solid #7f1d1d',
   },
   actions: { display: 'flex', gap: 12, marginBottom: 20 },
   primaryBtn: {
@@ -303,7 +310,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   secondaryBtn: {
     padding: '10px 24px',
-    background: '#ffffff',
+    background: '#1e293b',
     color: '#2563eb',
     border: '1px solid #2563eb',
     borderRadius: 6,
@@ -314,12 +321,12 @@ const styles: Record<string, React.CSSProperties> = {
   retryHint: {
     margin: 0,
     fontSize: 13,
-    color: '#6b7280',
+    color: '#94a3b8',
   },
   note: {
     margin: 0,
     fontSize: 13,
-    color: '#6b7280',
+    color: '#94a3b8',
     textAlign: 'center',
   },
 };

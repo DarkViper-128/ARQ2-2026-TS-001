@@ -95,37 +95,40 @@ export default function Orders() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 24, fontFamily: 'system-ui, sans-serif', minHeight: '100vh' },
+  container: { padding: 24, fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: '#0f172a', color: '#f1f5f9' },
   nav: { marginBottom: 32 },
   backBtn: {
     background: 'none',
-    border: '1px solid #d1d5db',
+    border: '1px solid #334155',
     padding: '8px 16px',
     borderRadius: 6,
     cursor: 'pointer',
     fontSize: 14,
+    color: '#94a3b8',
   },
-  title: { fontSize: 28, color: '#111827', marginBottom: 24 },
+  title: { fontSize: 28, color: '#ffffff', marginBottom: 24 },
   loader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     height: '60vh',
     fontSize: 18,
-    color: '#6b7280',
+    color: '#94a3b8',
   },
   error: {
     padding: 24,
-    background: '#fef2f2',
-    color: '#dc2626',
+    background: '#450a0a',
+    color: '#fca5a5',
     borderRadius: 8,
     margin: 24,
+    border: '1px solid #7f1d1d',
   },
   empty: {
     textAlign: 'center',
     padding: 60,
-    background: '#f3f4f6',
+    background: '#1e293b',
     borderRadius: 12,
+    border: '1px solid #334155',
   },
   orderGrid: {
     display: 'grid',
@@ -134,10 +137,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   orderCard: {
     padding: 24,
-    background: '#ffffff',
-    border: '1px solid #e5e7eb',
+    background: '#1e293b',
+    border: '1px solid #334155',
     borderRadius: 12,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
   },
   orderHeader: {
     display: 'flex',
@@ -148,14 +151,14 @@ const styles: Record<string, React.CSSProperties> = {
   orderIdLabel: {
     fontSize: 12,
     fontWeight: 600,
-    color: '#6b7280',
+    color: '#94a3b8',
     textTransform: 'uppercase',
   },
   orderIdValue: {
     fontSize: 16,
     fontWeight: 700,
-    color: '#111827',
+    color: '#ffffff',
   },
   orderInfo: { display: 'flex', flexDirection: 'column', gap: 8 },
-  orderText: { margin: 0, fontSize: 14, color: '#374151' },
+  orderText: { margin: 0, fontSize: 14, color: '#cbd5e1' },
 };

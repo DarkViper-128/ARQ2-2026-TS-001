@@ -84,21 +84,23 @@ export default function Tickets() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { padding: 24, fontFamily: 'system-ui, sans-serif' },
+  container: { padding: 24, fontFamily: 'system-ui, sans-serif', background: '#0f172a', color: '#f1f5f9' },
   nav: { marginBottom: 32 },
   backBtn: {
     background: 'none',
-    border: '1px solid #d1d5db',
+    border: '1px solid #334155',
     padding: '8px 16px',
     borderRadius: 6,
     cursor: 'pointer',
+    color: '#94a3b8',
   },
-  title: { fontSize: 28, color: '#111827', marginBottom: 24 },
+  title: { fontSize: 28, color: '#ffffff', marginBottom: 24 },
   empty: {
     textAlign: 'center',
     padding: 60,
-    background: '#f3f4f6',
+    background: '#1e293b',
     borderRadius: 12,
+    border: '1px solid #334155',
   },
   ticketsGrid: {
     display: 'grid',
@@ -107,10 +109,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   ticketCard: {
     padding: 24,
-    background: '#ffffff',
+    background: '#1e293b',
     border: '2px solid #2563eb',
     borderRadius: 12,
-    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
   },
   ticketHeader: {
     display: 'flex',
@@ -118,27 +120,29 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     marginBottom: 20,
   },
-  ticketTitle: { margin: 0, fontSize: 20, color: '#111827' },
+  ticketTitle: { margin: 0, fontSize: 20, color: '#ffffff' },
   seatId: {
     padding: '4px 10px',
-    background: '#dbeafe',
-    color: '#1e40af',
+    background: '#1e3a8a',
+    color: '#bfdbfe',
     borderRadius: 20,
     fontSize: 12,
     fontWeight: 600,
+    border: '1px solid #3b82f6',
   },
   qrCode: {
     height: 120,
-    background: '#f3f4f6',
+    background: '#0f172a',
     borderRadius: 8,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    border: '1px solid #334155',
   },
   qrPlaceholder: {
     fontSize: 11,
-    color: '#6b7280',
+    color: '#94a3b8',
     textAlign: 'center',
     maxWidth: '100%',
   },
@@ -147,5 +151,5 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 6,
   },
-  ticketText: { margin: 0, fontSize: 14, color: '#374151' },
+  ticketText: { margin: 0, fontSize: 14, color: '#cbd5e1' },
 };
