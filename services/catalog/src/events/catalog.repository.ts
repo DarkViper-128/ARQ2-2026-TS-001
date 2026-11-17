@@ -11,6 +11,10 @@ export interface EventSummary {
   startsAt: string;
   saleStartsAt: string;
   status: string;
+  /** Seats in the map. The organizer console lists it; fans see the map itself. */
+  totalSeats: number;
+  /** Cheapest category, so a listing can show "from $X" without loading every price. */
+  priceFrom: { amount: number; currency: string } | null;
 }
 
 export interface EventDetail extends EventSummary {
@@ -46,12 +50,22 @@ export class CatalogRepository {
       startsAt: (row.starts_at as Date).toISOString(),
       saleStartsAt: (row.sale_starts_at as Date).toISOString(),
       status: row.status as string,
+      totalSeats: Number(row.total_seats ?? 0),
+      priceFrom:
+        row.price_from === null || row.price_from === undefined
+          ? null
+          : { amount: Number(row.price_from), currency: (row.currency as string) ?? 'COP' },
     };
   }
 
+  // The two aggregates are correlated subqueries so one event stays one row; a JOIN on
+  // seats would multiply the event by its 200 seats before grouping.
   private static readonly EVENT_COLUMNS = `
     e.event_id, e.name, e.artist, e.starts_at, e.sale_starts_at, e.status,
-    v.venue_id, v.name AS venue_name, v.city`;
+    v.venue_id, v.name AS venue_name, v.city,
+    (SELECT COUNT(*) FROM seats s WHERE s.event_id = e.event_id) AS total_seats,
+    (SELECT MIN(pc.price_amount) FROM price_categories pc WHERE pc.event_id = e.event_id) AS price_from,
+    (SELECT pc.currency FROM price_categories pc WHERE pc.event_id = e.event_id LIMIT 1) AS currency`;
 
   async listPublishedEvents(): Promise<EventSummary[]> {
     const [rows] = await this.pool.query<RowDataPacket[]>(

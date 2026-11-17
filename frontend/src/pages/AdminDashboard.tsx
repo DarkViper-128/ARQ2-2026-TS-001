@@ -2,34 +2,34 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { colors } from '../lib/theme';
+import { extractList } from '../lib/apiHelper';
 
 const API_BASE = '/v1';
 
+/** Exactly what the Catalog Service returns (spec.md, GET /events). */
 interface Event {
-  event_id: string;
+  eventId: string;
   name: string;
-  description: string;
   artist: string;
-  venue_name: string;
-  venue_city: string;
-  starts_at: string;
-  sale_starts_at: string;
+  venue: { venueId: string; name: string; city: string };
+  startsAt: string;
+  saleStartsAt: string;
   status: 'DRAFT' | 'PUBLISHED' | 'ON_SALE' | 'SOLD_OUT' | 'CANCELLED';
-  total_seats: number;
-  price_amount: number;
-  created_at: string;
+  totalSeats: number;
+  priceFrom: { amount: number; currency: string } | null;
 }
 
+/** Exactly what the Order Service returns (spec.md, GET /orders). */
 interface Order {
-  order_id: string;
-  user_id: string;
-  user_email: string;
-  event_id: string;
-  hold_id: string;
+  orderId: string;
+  userId: string;
+  userEmail?: string;
+  eventId: string;
+  holdId: string;
   status: 'PENDING' | 'CONFIRMED' | 'FAILED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
-  total_amount: number;
-  failure_reason: string | null;
-  created_at: string;
+  total: { amount: number; currency: string };
+  failureReason: string | null;
+  createdAt: string;
 }
 
 interface ErrorLog {
@@ -72,7 +72,7 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [refundSearch, setRefundSearch] = useState('');
   const filteredOrders = orders.filter((o) =>
-    refundSearch === '' || o.order_id.toLowerCase().includes(refundSearch.toLowerCase())
+    refundSearch === '' || o.orderId.toLowerCase().includes(refundSearch.toLowerCase())
   );
 
   // Sincronizar la ruta de la URL con la tab activa (cada ruta = un dashboard)
@@ -104,10 +104,15 @@ const AdminDashboard: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [eventsData, ordersData] = await Promise.all([
-        (await apiFetch('/events')) as Event[],
-        (await apiFetch('/orders')) as Order[],
+      // GET /events answers { events: [...] } while GET /orders answers a bare array.
+      // Casting both to an array put an object into state and the render then blew up
+      // on events.map. extractList normalises either shape.
+      const [eventsRaw, ordersRaw] = await Promise.all([
+        apiFetch('/events'),
+        apiFetch('/orders'),
       ]);
+      const eventsData = extractList<Event>(eventsRaw);
+      const ordersData = extractList<Order>(ordersRaw);
       setEvents(eventsData);
       setMyEvents(eventsData.filter((e) => e.status !== 'CANCELLED'));
       setOrders(ordersData);
@@ -122,12 +127,12 @@ const AdminDashboard: React.FC = () => {
       const failed = ordersData.filter((o) => o.status === 'FAILED' || o.status === 'CANCELLED');
       setErrorLogs(
         failed
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .slice(0, 10)
           .map((o) => ({
             operation: 'Checkout',
-            message: o.failure_reason || 'Orden cancelada',
-            timestamp: o.created_at,
+            message: o.failureReason || 'Orden cancelada',
+            timestamp: o.createdAt,
           }))
       );
     } catch (err: any) {
@@ -176,8 +181,8 @@ const AdminDashboard: React.FC = () => {
           name: createForm.name,
           artist: createForm.artist || createForm.name,
           venue: { name: 'Estadio Local', city: 'Bogota' },
-          starts_at: new Date(Date.now() + 86400000 * 30).toISOString(),
-          sale_starts_at: new Date(Date.now() + 86400000).toISOString(),
+          startsAt: new Date(Date.now() + 86400000 * 30).toISOString(),
+          saleStartsAt: new Date(Date.now() + 86400000).toISOString(),
           status: 'DRAFT',
           priceCategories: [{ category: 'General', price: { amount: parseInt(createForm.price) || 100, currency: 'COP' } }],
           seats,
@@ -444,11 +449,17 @@ const AdminDashboard: React.FC = () => {
                 </thead>
                 <tbody>
                   {events.map((event) => (
-                    <tr key={event.event_id} style={styles.tableRow}>
+                    <tr key={event.eventId} style={styles.tableRow}>
                       <td style={styles.tableCell}>{event.name}</td>
-                      <td style={{ ...styles.tableCell, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.description || '—'}</td>
-                      <td style={styles.tableCell}>{event.total_seats}</td>
-                      <td style={styles.tableCell}>${event.price_amount.toLocaleString()} COP</td>
+                      <td style={{ ...styles.tableCell, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {event.artist} · {event.venue?.name ?? '—'}
+                      </td>
+                      <td style={styles.tableCell}>{event.totalSeats ?? 0}</td>
+                      <td style={styles.tableCell}>
+                        {event.priceFrom
+                          ? `$${event.priceFrom.amount.toLocaleString()} ${event.priceFrom.currency}`
+                          : '—'}
+                      </td>
                       <td style={styles.tableCell}>
                         <span style={{ ...styles.badge, ...statusColor(event.status) }}>{event.status}</span>
                       </td>
@@ -456,7 +467,7 @@ const AdminDashboard: React.FC = () => {
                         {event.status === 'DRAFT' && (
                           <Button
                             type="button"
-                            onClick={() => handlePublish(event.event_id)}
+                            onClick={() => handlePublish(event.eventId)}
                             disabled={loading}
                             variant="primary"
                             style={styles.tableBtn}
@@ -501,16 +512,22 @@ const AdminDashboard: React.FC = () => {
                 </thead>
                 <tbody>
                   {myEvents.map((event) => (
-                    <tr key={event.event_id} style={styles.tableRow}>
+                    <tr key={event.eventId} style={styles.tableRow}>
                       <td style={styles.tableCell}>{event.name}</td>
-                      <td style={{ ...styles.tableCell, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.description || '—'}</td>
-                      <td style={styles.tableCell}>{event.total_seats}</td>
-                      <td style={styles.tableCell}>${event.price_amount.toLocaleString()} COP</td>
+                      <td style={{ ...styles.tableCell, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {event.artist} · {event.venue?.name ?? '—'}
+                      </td>
+                      <td style={styles.tableCell}>{event.totalSeats ?? 0}</td>
+                      <td style={styles.tableCell}>
+                        {event.priceFrom
+                          ? `$${event.priceFrom.amount.toLocaleString()} ${event.priceFrom.currency}`
+                          : '—'}
+                      </td>
                       <td style={styles.tableCell}>
                         <span style={{ ...styles.badge, ...statusColor(event.status) }}>{event.status}</span>
                       </td>
                       <td style={styles.tableCell}>
-                        {editing === event.event_id ? (
+                        {editing === event.eventId ? (
                           <form onSubmit={handleUpdateEvent} style={styles.editForm}>
                             <input
                               style={styles.editInput}
@@ -550,12 +567,12 @@ const AdminDashboard: React.FC = () => {
                               <Button
                                 type="button"
                                 onClick={() => {
-                                  setEditing(event.event_id);
+                                  setEditing(event.eventId);
                                   setEditForm({
                                     name: event.name,
-                                    description: event.description,
-                                    totalSeats: String(event.total_seats),
-                                    price: String(event.price_amount),
+                                    description: event.artist,
+                                    totalSeats: String(event.totalSeats ?? 0),
+                                    price: String(event.priceFrom?.amount ?? 0),
                                   });
                                 }}
                                 variant="primary"
@@ -567,7 +584,7 @@ const AdminDashboard: React.FC = () => {
                             {event.status === 'DRAFT' && (
                               <Button
                                 type="button"
-                                onClick={() => handlePublish(event.event_id)}
+                                onClick={() => handlePublish(event.eventId)}
                                 disabled={loading}
                                 variant="primary"
                                 style={{ ...styles.tableBtn, marginLeft: 8 }}
@@ -627,10 +644,10 @@ const AdminDashboard: React.FC = () => {
                 </thead>
                 <tbody>
                   {filteredOrders.map((order) => (
-                    <tr key={order.order_id} style={styles.tableRow}>
-                      <td style={styles.tableCell}>{order.order_id}</td>
-                      <td style={styles.tableCell}>{order.user_email}</td>
-                      <td style={styles.tableCell}>${order.total_amount.toLocaleString()} COP</td>
+                    <tr key={order.orderId} style={styles.tableRow}>
+                      <td style={styles.tableCell}>{order.orderId}</td>
+                      <td style={styles.tableCell}>{order.userEmail ?? order.userId}</td>
+                      <td style={styles.tableCell}>${order.total.amount.toLocaleString()} COP</td>
                       <td style={styles.tableCell}>
                         <span style={{ ...styles.badge, ...orderStatusColor(order.status) }}>{order.status}</span>
                       </td>
@@ -638,7 +655,7 @@ const AdminDashboard: React.FC = () => {
                         {order.status === 'CONFIRMED' && (
                           <Button
                             type="button"
-                            onClick={() => handleRefund(order.order_id)}
+                            onClick={() => handleRefund(order.orderId)}
                             disabled={loading}
                             variant="danger"
                             style={styles.tableBtn}

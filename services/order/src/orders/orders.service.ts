@@ -193,6 +193,61 @@ export class OrdersService {
     return { orderId, status: 'REFUND_PENDING' };
   }
 
+  /**
+   * GET /orders. Newest first: the caller's own orders, or every order for an ORGANIZER.
+   *
+   * Seats are fetched with a single extra query instead of one per order, so the page
+   * costs two round trips no matter how many orders the fan has.
+   */
+  async listForUser(userId: string, { isOrganizer = false, limit = 50 } = {}) {
+    const safeLimit = Math.min(Math.max(Math.trunc(limit) || 1, 1), 200);
+    // An ORGANIZER runs the console: they see every order, the same way
+    // GET /orders/{orderId} already lets them read somebody else's.
+    const [orders] = isOrganizer
+      ? await this.pool.query<RowDataPacket[]>(
+          'SELECT * FROM orders ORDER BY created_at DESC LIMIT ?',
+          [safeLimit],
+        )
+      : await this.pool.query<RowDataPacket[]>(
+          'SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+          [userId, safeLimit],
+        );
+    if (orders.length === 0) return [];
+
+    const orderIds = orders.map((order) => order.order_id as string);
+    const [seats] = await this.pool.query<RowDataPacket[]>(
+      `SELECT order_id, seat_id, category, price_amount, currency
+         FROM order_seats WHERE order_id IN (?) ORDER BY order_id, seat_id`,
+      [orderIds],
+    );
+
+    const seatsByOrder = new Map<string, RowDataPacket[]>();
+    for (const seat of seats) {
+      const key = seat.order_id as string;
+      const list = seatsByOrder.get(key);
+      if (list) list.push(seat);
+      else seatsByOrder.set(key, [seat]);
+    }
+
+    return orders.map((order) => ({
+      orderId: order.order_id as string,
+      userId: order.user_id as string,
+      eventId: order.event_id as string,
+      holdId: order.hold_id as string,
+      status: order.status as string,
+      failureReason: (order.failure_reason as string | null) ?? null,
+      seats: (seatsByOrder.get(order.order_id as string) ?? []).map((seat) => ({
+        seatId: seat.seat_id as string,
+        category: seat.category as string,
+        price: { amount: Number(seat.price_amount), currency: seat.currency as string },
+      })),
+      total: { amount: Number(order.total_amount), currency: order.currency as string },
+      version: Number(order.version),
+      createdAt: (order.created_at as Date).toISOString(),
+      updatedAt: (order.updated_at as Date).toISOString(),
+    }));
+  }
+
   /** GET /orders/{orderId}. The fan who owns the order or an ORGANIZER may read it. */
   async get(orderId: string, userId: string, isOrganizer = false) {
     const [orders] = await this.pool.query<RowDataPacket[]>('SELECT * FROM orders WHERE order_id = ?', [orderId]);

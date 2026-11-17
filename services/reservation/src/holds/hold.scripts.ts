@@ -20,6 +20,7 @@
  *
  * KEYS  seat keys, one per requested seat
  * ARGV  [1] holdId [2] ttl seconds [3] hold key [4] record JSON
+ * ARGV  [8] per-user index key `holds:user:{userId}` (used by GET /holds)
  *       [5] index key [6] ref key [7] expiresAt ms
  *
  * Returns the seat keys that are already taken (held or sold). Empty list = success.
@@ -41,6 +42,7 @@ end
 redis.call('SET', ARGV[3], ARGV[4], 'EX', ttl)
 redis.call('SET', ARGV[6], ARGV[4])
 redis.call('ZADD', ARGV[5], tonumber(ARGV[7]), ARGV[1])
+redis.call('ZADD', ARGV[8], tonumber(ARGV[7]), ARGV[1])
 return {}
 `;
 

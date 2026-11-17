@@ -4,10 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
 import { colors } from '../lib/theme';
 
-type View = 'selector' | 'organizerLogin';
+type View = 'selector' | 'login';
+type Role = 'FAN' | 'ORGANIZER';
 
 export default function Login() {
   const [view, setView] = useState<View>('selector');
+  const [loginAs, setLoginAs] = useState<Role>('FAN');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -15,11 +17,12 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleEnterAsFan = () => {
+  const startLogin = (role: Role) => {
     setError('');
-    // El fan entra sin credenciales: rol FAN, sin token real
-    login(null, 'fan', 'FAN');
-    navigate('/');
+    setUsername('');
+    setPassword('');
+    setLoginAs(role);
+    setView('login');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,7 +55,7 @@ export default function Login() {
       const role = payload.realm_access?.roles?.[0] || 'FAN';
 
       login(data.access_token, username, role);
-      navigate('/admin');
+      navigate(role === 'ORGANIZER' ? '/admin' : '/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error de inicio de sesión');
     } finally {
@@ -73,7 +76,7 @@ export default function Login() {
             <div style={styles.roleButtons}>
               <Button
                 type="button"
-                onClick={handleEnterAsFan}
+                onClick={() => startLogin('FAN')}
                 disabled={loading}
                 variant="primary"
                 style={styles.roleBtn}
@@ -82,7 +85,7 @@ export default function Login() {
               </Button>
               <Button
                 type="button"
-                onClick={() => setView('organizerLogin')}
+                onClick={() => startLogin('ORGANIZER')}
                 disabled={loading}
                 variant="outline"
                 style={styles.roleBtnOutline}
@@ -95,7 +98,7 @@ export default function Login() {
           <>
             <h1 style={styles.title}>FlashTix</h1>
             <p style={styles.subtitle}>
-              Inicio de sesión — Organizador
+              Inicio de sesión — {loginAs === 'FAN' ? 'Fan' : 'Organizador'}
             </p>
             <Button
               type="button"
@@ -116,7 +119,7 @@ export default function Login() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="organizer1"
+                  placeholder={loginAs === 'FAN' ? 'fan1' : 'organizer1'}
                   style={styles.input}
                   required
                 />
@@ -139,8 +142,17 @@ export default function Login() {
             <div style={styles.hint}>
               <p>Usuarios de prueba:</p>
               <ul style={styles.list}>
-                <li>organizer1 / organizer12345 (ORGANIZER)</li>
-                <li>organizer2 / organizer12345 (ORGANIZER)</li>
+                {loginAs === 'FAN' ? (
+                  <>
+                    <li>fan1 / fan12345 (FAN)</li>
+                    <li>fan2 / fan12345 (FAN)</li>
+                  </>
+                ) : (
+                  <>
+                    <li>organizer1 / organizer12345 (ORGANIZER)</li>
+                    <li>organizer2 / organizer12345 (ORGANIZER)</li>
+                  </>
+                )}
               </ul>
             </div>
           </>

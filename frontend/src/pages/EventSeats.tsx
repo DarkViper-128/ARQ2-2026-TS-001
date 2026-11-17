@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, useAuth } from '../lib/api';
 import { Button } from '../components/Button';
@@ -15,10 +15,14 @@ interface Event {
   totalSeats?: number;
 }
 
+/** A seat exactly as the Catalog Service reports it (spec.md, GET /events/{id}/seats). */
 interface Seat {
-  id: string;
+  seatId: string;
+  section: string;
+  row: string;
   number: string;
-  status: 'available' | 'selected' | 'taken';
+  category: string;
+  status: 'AVAILABLE' | 'HELD' | 'SOLD';
 }
 
 const PRICE_PER_TICKET = 100; // 100 pesos por boleta
@@ -34,23 +38,48 @@ export default function EventSeats() {
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [hoveredSeat, setHoveredSeat] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  /**
+   * The access token lives 15 minutes, so a fan who browses for a while and then buys
+   * gets a 401. Every other screen clears the session and sends them to the login form;
+   * this one used to print "UNAUTHENTICATED" and leave them stuck.
+   */
+  const handleApiError = useCallback(
+    (err: Error) => {
+      if (err.message === 'UNAUTHENTICATED') {
+        localStorage.removeItem('flashtix_token');
+        localStorage.removeItem('flashtix_user');
+        navigate('/login');
+        return;
+      }
+      setError(err.message || 'No se pudo completar la operación');
+    },
+    [navigate],
+  );
+
   useEffect(() => {
     if (!eventId) return;
-    api.get(`/events/${eventId}`, token)
-      .then((data: Event) => {
-        setEvent(data);
-        const total = data.totalSeats || 100;
-        const seatCount = Math.min(total, 100);
-        const initial: Seat[] = [];
-        for (let i = 1; i <= seatCount; i++) {
-          initial.push({ id: `seat-${i}`, number: `A-${String(i).padStart(3, '0')}`, status: 'available' });
-        }
-        setSeats(initial);
+    // The seat map comes from the catalog. It used to be generated here with ids like
+    // "A-001", which do not exist and which the Reservation Service rejects with 400.
+    Promise.all([
+      api.get(`/events/${eventId}`, token),
+      api.get(`/events/${eventId}/seats`, token),
+    ])
+      .then(([eventData, seatData]: [Event, { seats: Seat[] }]) => {
+        setEvent(eventData);
+        setSeats(Array.isArray(seatData?.seats) ? seatData.seats : []);
+        // Drop any selection that somebody else took while this page was open.
+        setSelectedSeats((prev) =>
+          prev.filter((id) =>
+            (seatData?.seats ?? []).some((s) => s.seatId === id && s.status === 'AVAILABLE'),
+          ),
+        );
       })
-      .catch((err: Error) => setError(err.message));
+      .catch(handleApiError)
+      .finally(() => setLoadingData(false));
   }, [eventId, token]);
 
   const toggleSeat = (seatId: string) => {
@@ -111,11 +140,38 @@ export default function EventSeats() {
       // 4. Pasarela de pago (Order -> Payment)
       navigate('/order');
     } catch (err: any) {
-      setError(err.message || 'No se pudo crear la reserva');
+      handleApiError(err instanceof Error ? err : new Error('No se pudo crear la reserva'));
     } finally {
       setLoading(false);
     }
   };
+
+  // Hooks must run on every render, so this sits above the early returns below.
+  // Placing it after them made React see a different hook count once the data
+  // arrived: "Rendered more hooks than during the previous render".
+  // The catalog returns a flat list; the screen needs it as a map: section, then row.
+  const sections = useMemo(() => {
+    const bySection = new Map<string, Map<string, Seat[]>>();
+    for (const seat of seats) {
+      let rows = bySection.get(seat.section);
+      if (!rows) bySection.set(seat.section, (rows = new Map()));
+      const row = rows.get(seat.row);
+      if (row) row.push(seat);
+      else rows.set(seat.row, [seat]);
+    }
+    return [...bySection.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, rows]) => {
+        const sorted = [...rows.entries()].sort(([a], [b]) => a.localeCompare(b));
+        for (const [, list] of sorted) list.sort((a, b) => a.number.localeCompare(b.number));
+        return {
+          name,
+          category: sorted[0]?.[1][0]?.category ?? '',
+          columns: (sorted[0]?.[1] ?? []).map((seat) => seat.number),
+          rows: sorted.map(([rowName, list]) => ({ name: rowName, seats: list })),
+        };
+      });
+  }, [seats]);
 
   if (loading) {
     return (
@@ -124,11 +180,13 @@ export default function EventSeats() {
       </div>
     );
   }
+  if (loadingData) return <div style={styles.loader}>Cargando mapa de asientos…</div>;
   if (error) return <div style={styles.error}>Error: {error}</div>;
   if (!event) return <div style={styles.empty}>Evento no encontrado</div>;
 
+
   const total = selectedSeats.length * PRICE_PER_TICKET;
-  const takenCount = seats.filter((s) => s.status === 'taken').length;
+  const takenCount = seats.filter((s) => s.status !== 'AVAILABLE').length;
 
   return (
     <div style={styles.container}>
@@ -159,32 +217,48 @@ export default function EventSeats() {
 
         <div style={styles.seatMapWrapper}>
           <div style={styles.stageLabel}>ESCENARIO</div>
-          <div style={styles.seatMap}>
-            {seats.map((seat) => {
-              const selected = isSelected(seat.id);
-              const taken = seat.status === 'taken';
-              const hover = !taken && !loading && hoveredSeat === seat.id;
-              return (
-                <button
-                  key={seat.id}
-                  onClick={taken ? undefined : () => toggleSeat(seat.id)}
-                  onMouseEnter={taken || loading ? undefined : () => setHoveredSeat(seat.id)}
-                  onMouseLeave={taken || loading ? undefined : () => setHoveredSeat(null)}
-                  disabled={taken || loading}
-                  style={{
-                    ...styles.seatBtn,
-                    ...(selected ? styles.seatSelected : {}),
-                    ...(taken ? styles.seatTaken : {}),
-                    ...(hover ? { transform: 'translateY(-1px)', opacity: 0.92 } : {}),
-                    transition: 'transform 0.15s, opacity 0.15s',
-                  }}
-                  title={`Asiento ${seat.number}`}
-                >
-                  {seat.number.slice(-3)}
-                </button>
-              );
-            })}
-          </div>
+          {sections.map((section) => (
+            <div key={section.name} style={styles.section}>
+              <div style={styles.sectionHeader}>
+                Sección {section.name} · {section.category}
+              </div>
+              <div style={styles.colHeader}>
+                <span style={styles.rowLabel} />
+                {section.columns.map((col) => (
+                  <span key={col} style={styles.colLabel}>{col}</span>
+                ))}
+              </div>
+              {section.rows.map((row) => (
+                <div key={row.name} style={styles.seatRow}>
+                  <span style={styles.rowLabel}>Fila {row.name}</span>
+                  {row.seats.map((seat) => {
+                    const selected = isSelected(seat.seatId);
+                    const taken = seat.status !== 'AVAILABLE';
+                    const hover = !taken && !loading && hoveredSeat === seat.seatId;
+                    return (
+                      <button
+                        key={seat.seatId}
+                        onClick={taken ? undefined : () => toggleSeat(seat.seatId)}
+                        onMouseEnter={taken || loading ? undefined : () => setHoveredSeat(seat.seatId)}
+                        onMouseLeave={taken || loading ? undefined : () => setHoveredSeat(null)}
+                        disabled={taken || loading}
+                        style={{
+                          ...styles.seatBtn,
+                          ...(selected ? styles.seatSelected : {}),
+                          ...(taken ? styles.seatTaken : {}),
+                          ...(hover ? { transform: 'translateY(-1px)', opacity: 0.92 } : {}),
+                          transition: 'transform 0.15s, opacity 0.15s',
+                        }}
+                        title={`Asiento ${seat.seatId} · ${seat.category} · ${seat.status}`}
+                      >
+                        {seat.number}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
 
         <div style={styles.legend}>
@@ -322,6 +396,31 @@ const styles: Record<string, React.CSSProperties> = {
     borderColor: colors.muted,
     color: '#6b7280',
     cursor: 'not-allowed',
+  },
+  section: { marginBottom: 18 },
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: 700,
+    letterSpacing: 0.5,
+    color: colors.muted,
+    textTransform: 'uppercase',
+    margin: '14px 0 8px 0',
+  },
+  colHeader: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 },
+  colLabel: {
+    width: 34,
+    textAlign: 'center',
+    fontSize: 10,
+    color: colors.muted,
+  },
+  seatRow: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 },
+  rowLabel: {
+    width: 56,
+    flexShrink: 0,
+    fontSize: 11,
+    color: colors.muted,
+    textAlign: 'right',
+    paddingRight: 6,
   },
   legend: {
     display: 'flex',

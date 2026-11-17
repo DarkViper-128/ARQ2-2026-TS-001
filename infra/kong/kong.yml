@@ -94,7 +94,12 @@ routes:
         config:
           access:
             - &fan_identity |
+              -- The Authorization header is the normal place. The `jwt` query argument is the
+              -- fallback for Server-Sent Events: the browser EventSource API cannot send
+              -- headers. Trusting it is safe because the jwt plugin above already verified the
+              -- signature of whichever copy it found. Only fan routes need it.
               local token = (kong.request.get_header("authorization") or ""):match("^[Bb]earer%s+(.+)$")
+                or kong.request.get_query_arg("jwt")
               local b64 = token and token:match("^[%w_%-]+%.([%w_%-]+)%.")
               if not b64 then
                 return kong.response.exit(401, { code = "UNAUTHENTICATED", status = 401, detail = "Malformed bearer token" })
