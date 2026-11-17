@@ -146,17 +146,9 @@ export default function EventSeats() {
     }
   };
 
-  if (loading) {
-    return (
-      <div style={styles.loader}>
-        <div>Procesando reserva…</div>
-      </div>
-    );
-  }
-  if (loadingData) return <div style={styles.loader}>Cargando mapa de asientos…</div>;
-  if (error) return <div style={styles.error}>Error: {error}</div>;
-  if (!event) return <div style={styles.empty}>Evento no encontrado</div>;
-
+  // Hooks must run on every render, so this sits above the early returns below.
+  // Placing it after them made React see a different hook count once the data
+  // arrived: "Rendered more hooks than during the previous render".
   // The catalog returns a flat list; the screen needs it as a map: section, then row.
   const sections = useMemo(() => {
     const bySection = new Map<string, Map<string, Seat[]>>();
@@ -180,6 +172,18 @@ export default function EventSeats() {
         };
       });
   }, [seats]);
+
+  if (loading) {
+    return (
+      <div style={styles.loader}>
+        <div>Procesando reserva…</div>
+      </div>
+    );
+  }
+  if (loadingData) return <div style={styles.loader}>Cargando mapa de asientos…</div>;
+  if (error) return <div style={styles.error}>Error: {error}</div>;
+  if (!event) return <div style={styles.empty}>Evento no encontrado</div>;
+
 
   const total = selectedSeats.length * PRICE_PER_TICKET;
   const takenCount = seats.filter((s) => s.status !== 'AVAILABLE').length;
