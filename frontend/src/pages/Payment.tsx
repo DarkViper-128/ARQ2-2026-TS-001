@@ -61,31 +61,65 @@ export default function Payment() {
 
     loadOrder();
 
-    // SSE: actualiza el estado en tiempo real sin recargar la página.
+    // The order finishes asynchronously, so the screen has to be told when it does.
+    const TERMINAL = ['CONFIRMED', 'FAILED', 'CANCELLED'];
+    let polling: ReturnType<typeof setInterval> | null = null;
+
+    const applyStatus = (status: string, updatedAt?: string) => {
+      setOrder((prev) => (prev ? { ...prev, status, updatedAt: updatedAt ?? prev.updatedAt } : prev));
+      if (TERMINAL.includes(status) && polling) {
+        clearInterval(polling);
+        polling = null;
+      }
+    };
+
+    // Fallback for whenever the stream is unavailable or drops: without it the screen
+    // stayed on "procesando" forever even though the order had already been confirmed.
+    const startPolling = (orderId: string) => {
+      if (polling) return;
+      polling = setInterval(async () => {
+        try {
+          const data = (await api.get(`/orders/${orderId}`, token)) as Order;
+          applyStatus(data.status, data.updatedAt);
+        } catch {
+          // keep trying; the stream or the next tick may succeed
+        }
+      }, 2000);
+    };
+
     try {
-      const storedOrder = JSON.parse(stored);
-      const orderId = storedOrder.orderId;
+      const orderId = JSON.parse(stored).orderId;
       // EventSource cannot send headers, so the token travels as the `jwt` query
       // argument. Kong verifies it there exactly as it does in the header.
       eventSource = new EventSource(`/v1/orders/${orderId}/events?jwt=${token}`);
-      eventSource.onmessage = (evt) => {
+
+      // The server names its events ("event: order.update"), and onmessage only fires
+      // for unnamed ones, so listening there meant never hearing anything.
+      eventSource.addEventListener('order.update', (evt) => {
         try {
-          const update = JSON.parse(evt.data);
-          setOrder((prev) => (prev ? { ...prev, status: update.data.status, updatedAt: update.data.updatedAt } : prev));
+          const update = JSON.parse((evt as MessageEvent).data);
+          applyStatus(update.status, update.updatedAt);
         } catch {
           // ignore malformed SSE frames
         }
-      };
+      });
+
       eventSource.onerror = () => {
-        // SSE puede caerse; no es crítico, el estado ya se cargó por HTTP.
         eventSource?.close();
+        startPolling(orderId);
       };
     } catch {
-      // EventSource no disponible en este entorno; seguimos con el estado HTTP.
+      // EventSource missing in this browser: poll instead.
+      try {
+        startPolling(JSON.parse(stored).orderId);
+      } catch {
+        // nothing else to do
+      }
     }
 
     return () => {
       eventSource?.close();
+      if (polling) clearInterval(polling);
     };
   }, [token, navigate]);
 
