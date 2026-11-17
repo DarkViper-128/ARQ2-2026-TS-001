@@ -159,10 +159,10 @@ Login uses the standard OIDC endpoints of Keycloak (`/realms/flashtix/protocol/o
 ```
 
 ### `GET /orders` - Order (F4)
-- **Auth:** FAN
-- **Behavior:** the authenticated fan's own orders, newest first, capped at 50. Seats are loaded
-  with one extra query for the whole page, not one per order. An ORGANIZER reading somebody
-  else's order uses `GET /orders/{orderId}` instead; this route is always scoped to the caller.
+- **Auth:** FAN (own orders) or ORGANIZER (all orders)
+- **Behavior:** newest first, capped at 50. A FAN gets their own orders; an **ORGANIZER gets
+  every order**, which is what the admin console lists. Seats are loaded with one extra query
+  for the whole page, not one per order.
 - **Responses:** `200 OK` with an array (empty when the fan never bought) · `401`
 - **Example `200`:** `[{ "orderId": "e4a7...", "eventId": "3f0c...", "status": "CONFIRMED", "seats": [{ "seatId": "A-12-07", "category": "VIP", "price": { "amount": 45000000, "currency": "COP" } }], "total": { "amount": 45000000, "currency": "COP" }, "createdAt": "2026-10-20T15:07:19Z" }]`
 

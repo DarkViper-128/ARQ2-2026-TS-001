@@ -51,10 +51,15 @@ export class OrdersController {
     return result.body;
   }
 
-  /** Lists the orders of the authenticated fan, newest first. Backs the "my orders" screen. */
+  /**
+   * Lists orders, newest first. A fan sees their own; an ORGANIZER sees every order,
+   * which is what the admin console needs.
+   */
   @Get()
   async list(@Req() request: Request) {
-    return this.orders.listForUser(currentUserId(request));
+    return this.orders.listForUser(currentUserId(request), {
+      isOrganizer: currentUserRoles(request).includes('ORGANIZER'),
+    });
   }
 
   @Get(':orderId')

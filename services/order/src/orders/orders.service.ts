@@ -194,17 +194,24 @@ export class OrdersService {
   }
 
   /**
-   * GET /orders. Orders of the authenticated fan, newest first.
+   * GET /orders. Newest first: the caller's own orders, or every order for an ORGANIZER.
    *
    * Seats are fetched with a single extra query instead of one per order, so the page
    * costs two round trips no matter how many orders the fan has.
    */
-  async listForUser(userId: string, limit = 50) {
+  async listForUser(userId: string, { isOrganizer = false, limit = 50 } = {}) {
     const safeLimit = Math.min(Math.max(Math.trunc(limit) || 1, 1), 200);
-    const [orders] = await this.pool.query<RowDataPacket[]>(
-      'SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
-      [userId, safeLimit],
-    );
+    // An ORGANIZER runs the console: they see every order, the same way
+    // GET /orders/{orderId} already lets them read somebody else's.
+    const [orders] = isOrganizer
+      ? await this.pool.query<RowDataPacket[]>(
+          'SELECT * FROM orders ORDER BY created_at DESC LIMIT ?',
+          [safeLimit],
+        )
+      : await this.pool.query<RowDataPacket[]>(
+          'SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+          [userId, safeLimit],
+        );
     if (orders.length === 0) return [];
 
     const orderIds = orders.map((order) => order.order_id as string);
