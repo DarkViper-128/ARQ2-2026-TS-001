@@ -8,14 +8,17 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY libs/shared/package.json libs/shared/
 COPY libs/nest-support/package.json libs/nest-support/
+COPY libs/tracing/package.json libs/tracing/
 COPY services/order/package.json services/order/
 RUN npm ci
 
 COPY libs/shared libs/shared
 COPY libs/nest-support libs/nest-support
+COPY libs/tracing libs/tracing
 COPY services/order services/order
 RUN npm run build -w @flashtix/shared \
  && npm run build -w @flashtix/nest-support \
+ && npm run build -w @flashtix/tracing \
  && npm run build -w @flashtix/order
 
 FROM node:20-alpine AS runtime
@@ -25,15 +28,17 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY libs/shared/package.json libs/shared/
 COPY libs/nest-support/package.json libs/nest-support/
+COPY libs/tracing/package.json libs/tracing/
 COPY services/order/package.json services/order/
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/libs/shared/dist libs/shared/dist
 COPY --from=build /app/libs/nest-support/dist libs/nest-support/dist
+COPY --from=build /app/libs/tracing/dist libs/tracing/dist
 COPY --from=build /app/services/order/dist services/order/dist
 # LockHold contract, loaded at runtime by the gRPC client (ORD-3).
 COPY proto proto
 
 USER node
 EXPOSE 3000
-CMD ["node", "services/order/dist/main.js"]
+CMD ["node", "-r", "/app/libs/tracing/dist/preload.js", "services/order/dist/main.js"]

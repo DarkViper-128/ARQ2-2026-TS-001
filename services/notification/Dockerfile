@@ -8,14 +8,17 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY libs/shared/package.json libs/shared/
 COPY libs/nest-support/package.json libs/nest-support/
+COPY libs/tracing/package.json libs/tracing/
 COPY services/notification/package.json services/notification/
 RUN npm ci
 
 COPY libs/shared libs/shared
 COPY libs/nest-support libs/nest-support
+COPY libs/tracing libs/tracing
 COPY services/notification services/notification
 RUN npm run build -w @flashtix/shared \
  && npm run build -w @flashtix/nest-support \
+ && npm run build -w @flashtix/tracing \
  && npm run build -w @flashtix/notification
 
 FROM node:20-alpine AS runtime
@@ -25,13 +28,15 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY libs/shared/package.json libs/shared/
 COPY libs/nest-support/package.json libs/nest-support/
+COPY libs/tracing/package.json libs/tracing/
 COPY services/notification/package.json services/notification/
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/libs/shared/dist libs/shared/dist
 COPY --from=build /app/libs/nest-support/dist libs/nest-support/dist
+COPY --from=build /app/libs/tracing/dist libs/tracing/dist
 COPY --from=build /app/services/notification/dist services/notification/dist
 
 USER node
 EXPOSE 3000
-CMD ["node", "services/notification/dist/main.js"]
+CMD ["node", "-r", "/app/libs/tracing/dist/preload.js", "services/notification/dist/main.js"]

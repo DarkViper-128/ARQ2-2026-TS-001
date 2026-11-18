@@ -2,14 +2,11 @@ import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { initTracing } from '@flashtix/tracing';
 import { correlationIdMiddleware } from '@flashtix/shared';
 import { createMetricsRegistry, createMetricsMiddleware, registerCustomMetrics } from '@flashtix/shared';
 import { ProblemDetailsFilter } from '@flashtix/nest-support';
 import { AppModule } from './app.module';
 
-// Initialize OpenTelemetry tracing with Jaeger exporter before anything else.
-initTracing({ serviceName: 'catalog' });
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: false });
