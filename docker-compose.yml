@@ -291,11 +291,9 @@ services:
   # Single entry point in front of Kong. Terminates external traffic and
   # load-balances across Kong instances (C4 Level 2: Load Balancer component).
   load-balancer:
-    image: haproxy:2.8-alpine
-    volumes:
-      - ./infra/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - ./infra/haproxy/docker-entrypoint.sh:/docker-entrypoint.sh:ro
-    entrypoint: ["/docker-entrypoint.sh"]
+    build:
+      context: .
+      dockerfile: infra/haproxy/Dockerfile
     ports:
       - "8000:8000"     # public API (was Kong's port)
       - "8404:8404"     # HAProxy stats UI

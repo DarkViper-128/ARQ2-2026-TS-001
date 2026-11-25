@@ -16,5 +16,6 @@ for var in $(env | grep -E '^[A-Z_]+=' | cut -d= -f1); do
     sed -i "s|\${$var:-.*}|$escaped_value|g; s|\${$var}|$escaped_value|g" /tmp/haproxy.cfg
 done
 
-# Execute the original entrypoint with our modified config
-exec docker-entrypoint.sh -f /tmp/haproxy.cfg "$@"
+# Execute haproxy directly with our modified config
+# Ignore any passed arguments (they come from Docker CMD which we don't need)
+exec haproxy -f /tmp/haproxy.cfg
