@@ -4,5 +4,5 @@
 .git
 .env
 docs
-infra
+# infra/ is NOT ignored: needed for HAProxy build context
 # proto/ is NOT ignored: Reservation and Order load the gRPC contract at runtime.

@@ -106,18 +106,18 @@ async function waitFor(fn, expected, timeoutMs = 20000) {
   return value;
 }
 
-async function admit(token) {
-  const joined = await call('POST', `/v1/events/${EVENT_ID}/queue`, { token });
+async function admit(token, eventId = EVENT_ID) {
+  const joined = await call('POST', `/v1/events/${eventId}/queue`, { token });
   for (let i = 0; i < 30; i++) {
-    const turn = await call('GET', `/v1/events/${EVENT_ID}/queue/${joined.json.queueTicketId}`, { token });
+    const turn = await call('GET', `/v1/events/${eventId}/queue/${joined.json.queueTicketId}`, { token });
     if (turn.json?.status === 'ADMITTED') return turn.json.admissionToken;
     await sleep(1000);
   }
   throw new Error('never admitted');
 }
 
-const hold = (token, admission, seatIds) =>
-  call('POST', '/v1/holds', { token, headers: { 'x-admission-token': admission }, body: { eventId: EVENT_ID, seatIds } });
+const hold = (token, admission, seatIds, eventId = EVENT_ID) =>
+  call('POST', '/v1/holds', { token, headers: { 'x-admission-token': admission }, body: { eventId, seatIds } });
 
 const checkout = (token, holdId) =>
   call('POST', '/v1/orders', {
@@ -136,8 +136,8 @@ function sql(database, statement) {
   ).trim();
 }
 
-async function freeSeats(count, section) {
-  const seats = (await call('GET', `/v1/events/${EVENT_ID}/seats`)).json.seats;
+async function freeSeats(count, section, eventId = EVENT_ID) {
+  const seats = (await call('GET', `/v1/events/${eventId}/seats`)).json.seats;
   const free = seats.filter((seat) => seat.status === 'AVAILABLE' && seat.section === section);
   if (free.length < count) throw new Error(`not enough free seats in section ${section}`);
   return free.slice(0, count).map((seat) => seat.seatId);
@@ -200,10 +200,16 @@ function newEventBody(name) {
     venue: { name: 'Smoke Arena', city: 'Medellin' },
     startsAt,
     saleStartsAt,
-    priceCategories: [{ category: 'VIP', price: { amount: 45000000, currency: 'COP' } }],
+    priceCategories: [
+      { category: 'VIP', price: { amount: 45000000, currency: 'COP' } },
+      { category: 'GENERAL', price: { amount: 15000000, currency: 'COP' } },
+    ],
     seats: [
       { seatId: 'A-01-01', category: 'VIP' },
       { seatId: 'A-01-02', category: 'VIP' },
+      { seatId: 'B-01-01', category: 'GENERAL' },
+      { seatId: 'B-01-02', category: 'GENERAL' },
+      { seatId: 'B-01-03', category: 'GENERAL' },
     ],
   };
 }
@@ -260,10 +266,10 @@ async function main() {
   );
 
   console.log('== 3. One ticket per seat and one email (F5: TKT-2 to TKT-4, NOT-2) ==');
-  const [seatA, seatB, seatC] = await freeSeats(3, 'B');
-  const ADM1 = await admit(FAN1);
-  const ADM2 = await admit(FAN2);
-  const happyHold = await hold(FAN1, ADM1, [seatA, seatB]);
+  const [seatA, seatB, seatC] = await freeSeats(3, 'B', newEventId);
+  const ADM1 = await admit(FAN1, newEventId);
+  const ADM2 = await admit(FAN2, newEventId);
+  const happyHold = await hold(FAN1, ADM1, [seatA, seatB], newEventId);
   check('a hold of two seats is created', 201, happyHold.status);
   const order = await checkout(FAN1, happyHold.json.holdId);
   const orderId = order.json?.orderId;
@@ -297,7 +303,7 @@ async function main() {
     orderId,
     userId: subOf(FAN1),
     userEmail: 'fan1@flashtix.test',
-    eventId: EVENT_ID,
+    eventId: newEventId,
     holdId: detail.holdId,
     seats: detail.seats.map((seat) => ({ seatId: seat.seatId, category: seat.category })),
   });
@@ -307,7 +313,7 @@ async function main() {
 
   console.log('== 5. A failed order is emailed (NOT-3) ==');
   await mock({ declineRate: 1 });
-  const failHold = await hold(FAN2, ADM2, [seatC]);
+  const failHold = await hold(FAN2, ADM2, [seatC], newEventId);
   const failOrder = await checkout(FAN2, failHold.json.holdId);
   check('order ends FAILED', 'FAILED', await waitFor(() => orderStatus(FAN2, failOrder.json.orderId), 'FAILED'));
   check('fan2 receives one email', 1, await waitFor(async () => (await emailsAbout(failOrder.json.orderId)).length, 1, 25000));

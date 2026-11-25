@@ -22,10 +22,18 @@ x-mysql: &mysql
     start_period: 30s
   networks: [flashtix-net]
 
+# Default logging driver for all services (json-file for Promtail compatibility)
+x-logging: &logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   # --- Databases (MySQL 8, one per service that owns data) -------------------
   catalog-db:
-    <<: *mysql
+    <<: [*mysql, *logging]
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: catalog
@@ -83,6 +91,7 @@ services:
   # catalog-cache: a cache may evict data (LRU) and needs no persistence.
   catalog-cache:
     image: redis:7-alpine
+    <<: *logging
     command: >
       redis-server
       --maxmemory 256mb
@@ -101,6 +110,7 @@ services:
   # hold-store: holds must NEVER be evicted (noeviction) and survive a restart (AOF).
   hold-store:
     image: redis:7-alpine
+    <<: *logging
     command: >
       redis-server
       --maxmemory 256mb
@@ -124,6 +134,7 @@ services:
   # rabbitmq-init container below.
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
+    <<: *logging
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
@@ -146,6 +157,7 @@ services:
   # Re-importing is harmless, so this runs again on every "docker compose up".
   rabbitmq-init:
     image: rabbitmq:3.13-management-alpine
+    <<: *logging
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -179,6 +191,7 @@ services:
   # object storage is a change of image. See docs/infrastructure.md.
   ticket-files:
     image: adobe/s3mock:3.12.0
+    <<: *logging
     environment:
       debug: "false"
     ports:
@@ -195,6 +208,7 @@ services:
   # Uses node because the busybox wget in the other images cannot send a PUT.
   ticket-files-init:
     image: node:20-alpine
+    <<: *logging
     depends_on:
       ticket-files:
         condition: service_healthy
@@ -221,6 +235,7 @@ services:
   # The Notification Worker sends SMTP here in development; nothing leaves the machine.
   mailpit:
     image: axllent/mailpit:v1.21
+    <<: *logging
     environment:
       MP_MAX_MESSAGES: 500
       MP_SMTP_AUTH_ACCEPT_ANY: 1
@@ -241,6 +256,7 @@ services:
     build:
       context: .
       dockerfile: tools/payment-gateway-mock/Dockerfile
+    <<: *logging
     environment:
       MOCK_PORT: 8080
       MOCK_LATENCY_MIN_MS: ${MOCK_LATENCY_MIN_MS}
@@ -264,6 +280,7 @@ services:
   # control instead of one regenerated on every import.
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
+    <<: *logging
     command: start-dev --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
@@ -291,11 +308,10 @@ services:
   # Single entry point in front of Kong. Terminates external traffic and
   # load-balances across Kong instances (C4 Level 2: Load Balancer component).
   load-balancer:
-    image: haproxy:2.8-alpine
-    volumes:
-      - ./infra/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - ./infra/haproxy/docker-entrypoint.sh:/docker-entrypoint.sh:ro
-    entrypoint: ["/docker-entrypoint.sh"]
+    build:
+      context: .
+      dockerfile: infra/haproxy/Dockerfile
+    <<: *logging
     ports:
       - "8000:8000"     # public API (was Kong's port)
       - "8404:8404"     # HAProxy stats UI
@@ -317,6 +333,7 @@ services:
   # No longer exposed directly to host; accessed via load-balancer.
   api-gateway:
     image: kong:3.8
+    <<: *logging
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /kong/kong.yml
@@ -353,6 +370,7 @@ services:
     build:
       context: .
       dockerfile: services/catalog/Dockerfile
+    <<: *logging
     environment:
       PORT: 3000
       OTEL_SERVICE_NAME: flashtix-catalog
@@ -385,6 +403,7 @@ services:
     build:
       context: .
       dockerfile: services/reservation/Dockerfile
+    <<: *logging
     environment:
       PORT: 3000
       OTEL_SERVICE_NAME: flashtix-reservation
@@ -419,6 +438,7 @@ services:
     build:
       context: .
       dockerfile: services/order/Dockerfile
+    <<: *logging
     environment:
       PORT: 3000
       OTEL_SERVICE_NAME: flashtix-order
@@ -455,6 +475,7 @@ services:
     build:
       context: .
       dockerfile: services/waiting-room/Dockerfile
+    <<: *logging
     environment:
       PORT: 3000
       OTEL_SERVICE_NAME: flashtix-waiting-room
@@ -489,6 +510,7 @@ services:
     build:
       context: .
       dockerfile: services/payment-worker/Dockerfile
+    <<: *logging
     environment:
       PORT: 3000
       OTEL_SERVICE_NAME: flashtix-payment-worker
@@ -526,6 +548,7 @@ services:
     build:
       context: .
       dockerfile: services/ticket/Dockerfile
+    <<: *logging
     environment:
       PORT: 3000
       OTEL_SERVICE_NAME: flashtix-ticket
@@ -567,6 +590,7 @@ services:
     build:
       context: .
       dockerfile: services/notification/Dockerfile
+    <<: *logging
     environment:
       PORT: 3000
       OTEL_SERVICE_NAME: flashtix-notification
@@ -605,6 +629,7 @@ services:
   # FlashTix service via OpenTelemetry. UI available at http://localhost:16686.
   jaeger:
     image: jaegertracing/all-in-one:1.47
+    <<: *logging
     ports:
       - "16686:16686"   # Jaeger UI
       - "14268:14268"   # HTTP collector (OTLP/Jaeger HTTP)
@@ -628,6 +653,7 @@ services:
   # host and container metrics respectively.
   prometheus:
     image: prom/prometheus:v2.54.1
+    <<: *logging
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -648,6 +674,7 @@ services:
 
   loki:
     image: grafana/loki:2.9.4
+    <<: *logging
     command: -config.file=/etc/loki/local-config.yaml
     ports:
       - "3100:3100"
@@ -664,6 +691,7 @@ services:
 
   promtail:
     image: grafana/promtail:2.9.4
+    <<: *logging
     command: -config.file=/etc/promtail/config.yml
     volumes:
       - ./infra/promtail/config.yml:/etc/promtail/config.yml:ro
@@ -676,6 +704,7 @@ services:
 
   grafana:
     image: grafana/grafana:10.2.2
+    <<: *logging
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
@@ -701,6 +730,7 @@ services:
 
   node-exporter:
     image: prom/node-exporter:v1.7.0
+    <<: *logging
     command:
       - "--path.rootfs=/host"
     pid: host
@@ -712,6 +742,7 @@ services:
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
+    <<: *logging
     command:
       - "--docker_only=true"
     ports:
